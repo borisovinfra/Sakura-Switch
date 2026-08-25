@@ -1,0 +1,191 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (example: v1.2.3)"
+        required: true
+      make_latest:
+        description: "Mark this release as latest"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+
+          if [[ -z "$VERSION" ]]; then
+            echo "Unable to determine release version"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Resolved version: $VERSION"
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Verify Swift version
+        run: swift --version
+
+      - name: Validate version input
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Version must match vMAJOR.MINOR.PATCH or prerelease format (example: v1.2.3 or v1.2.3-alpha.1)"
+            exit 1
+          fi
+
+      - name: Ensure tag exists on remote
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists"
+          else
+            git tag "$VERSION"
+            git push origin "$VERSION"
+          fi
+
+      - name: Install build dependencies
+        run: brew install libusb libmtp
+
+      - name: Build and package app bundle
+        run: |
+          swift build -c release --product SakuraSwitch
+          BIN_PATH=$(swift build -c release --show-bin-path)
+
+          if [[ ! -f "$BIN_PATH/SakuraSwitch" ]]; then
+            echo "Expected binary not found at $BIN_PATH/SakuraSwitch"
+            ls -la "$BIN_PATH"
+            exit 1
+          fi
+
+          APP_VERSION=${VERSION#v}
+          APP_DIR="dist/Sakura Switch.app"
+          PACKAGE_DIR="dist/Sakura Switch-${VERSION}"
+          CONTENTS_DIR="$APP_DIR/Contents"
+          MACOS_DIR="$CONTENTS_DIR/MacOS"
+          RESOURCES_DIR="$CONTENTS_DIR/Resources"
+          ICON_SOURCE="Assets/SakuraSwitch.icns"
+
+          rm -rf "$APP_DIR"
+          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+          cp "$BIN_PATH/SakuraSwitch" "$MACOS_DIR/Sakura Switch"
+          chmod +x "$MACOS_DIR/SakuraSwitch"
+
+          if [[ -f "$ICON_SOURCE" ]]; then
+            cp "$ICON_SOURCE" "$RESOURCES_DIR/Sakura Switch.icns"
+          fi
+
+          cat > "$CONTENTS_DIR/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>Sakura Switch</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.projectsakura.sakuraswitch</string>
+              <key>CFBundleName</key>
+              <string>Sakura Switch</string>
+              <key>CFBundleDisplayName</key>
+              <string>Sakura Switch</string>
+              <key>CFBundleIconFile</key>
+              <string>Sakura Switch.icns</string>
+              <key>CFBundleVersion</key>
+              <string>$APP_VERSION</string>
+              <key>CFBundleShortVersionString</key>
+              <string>$APP_VERSION</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>15.0</string>
+              <key>CFBundleSupportedPlatforms</key>
+              <array>
+                  <string>MacOSX</string>
+              </array>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>LSApplicationCategoryType</key>
+              <string>public.app-category.utilities</string>
+          </dict>
+          </plist>
+          PLIST
+
+          rm -rf "$PACKAGE_DIR"
+          mkdir -p "$PACKAGE_DIR"
+          mv "$APP_DIR" "$PACKAGE_DIR/Sakura Switch.app"
+          ditto -c -k --sequesterRsrc --keepParent "$PACKAGE_DIR" "SakuraSwitch-${VERSION}-macos-arm64.zip"
+
+      - name: Generate release notes
+        run: |
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -Fxv "$VERSION" | head -n1 || true)
+
+          {
+            echo "## Sakura Switch ${VERSION}"
+            echo ""
+            echo "Alpha release of Sakura Switch for Nintendo Switch installs."
+            echo ""
+            echo "### What's New"
+            if [[ -n "$PREVIOUS_TAG" ]]; then
+              git log --pretty='- %s' "${PREVIOUS_TAG}..${VERSION}"
+            else
+              echo "- Initial release"
+            fi
+            echo ""
+            echo "### Download"
+            printf -- '- Use `Sakura Switch-%s-macos-arm64.zip`\n' "$VERSION"
+            echo "- Unzip the archive"
+            echo "- Install and open from Terminal:"
+            printf -- '  `ditto "$HOME/Downloads/Sakura Switch-%s/Sakura Switch.app" "/Applications/Sakura Switch.app" && xattr -dr com.apple.quarantine "/Applications/Sakura Switch.app" && open "/Applications/Sakura Switch.app"`\n' "$VERSION"
+            echo ""
+            echo "### Notes"
+            echo "- This hobby alpha build is unsigned/not notarized"
+            echo "- Right-click Open may still be blocked on some systems; use the Terminal install command above"
+          } > RELEASE_NOTES.md
+
+      - name: Publish GitHub release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: Sakura Switch ${{ env.VERSION }}
+          body_path: RELEASE_NOTES.md
+          prerelease: ${{ contains(env.VERSION, '-') }}
+          make_latest: ${{ inputs.make_latest }}
+          files: SakuraSwitch-${{ env.VERSION }}-macos-arm64.zip
+
+      - name: Publish GitHub release (tag push)
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: Sakura Switch ${{ env.VERSION }}
+          body_path: RELEASE_NOTES.md
+          prerelease: ${{ contains(env.VERSION, '-') }}
+          make_latest: ${{ contains(env.VERSION, '-') && 'false' || 'true' }}
+          files: SakuraSwitch-${{ env.VERSION }}-macos-arm64.zip
