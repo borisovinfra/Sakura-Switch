@@ -58,6 +58,23 @@ struct AboutView: View {
 
             Spacer()
 
+            VStack(spacing: 2) {
+                Text("Special thanks 🌸")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .opacity(0.55)
+
+                Text("First blossom — digdat0")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .opacity(0.80)
+
+                Text("Our first public supporter, and the first person to believe in Sakura Switch.")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+                    .opacity(0.45)
+            }
+
             Text("© Project Sakura")
                 .foregroundStyle(.secondary)
         }
