@@ -6,6 +6,15 @@
 
 ### Native macOS toolkit for Nintendo Switch
 
+
+<p>
+  <img src="https://img.shields.io/badge/macOS-15%2B-black?logo=apple" alt="macOS 15+">
+  <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
+  <img src="https://img.shields.io/badge/License-MIT-ff69b4" alt="MIT License">
+  <img src="https://img.shields.io/github/v/release/borisovinfra/Sakura-Switch?label=Release&color=ff69b4" alt="Release">
+</p>
+
+
 Установка игр, управление SD-картой, сохранениями, галереей, модами и файлами Nintendo Switch — в одном приложении.
 
 **macOS 15.0+**
