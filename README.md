@@ -10,7 +10,7 @@
 <p>
   <img src="https://img.shields.io/badge/macOS-15%2B-black?logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
-  <img src="https://img.shields.io/badge/License-MIT-ff69b4" alt="MIT License">
+  <img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial-ff69b4" alt="PolyForm Noncommercial License">
   <img src="https://img.shields.io/github/v/release/borisovinfra/Sakura-Switch?label=Release&color=ff69b4" alt="Release">
 </p>
 
@@ -185,7 +185,7 @@ Made for the Nintendo Switch community.
 
 ## ⚖️ Правовая информация
 
-**Sakura Switch** — независимый проект с открытым исходным кодом, предназначенный для управления пользовательскими файлами и данными Nintendo Switch.
+**Sakura Switch** — независимый проект с доступным исходным кодом, предназначенный для управления пользовательскими файлами и данными Nintendo Switch.
 
 Sakura Switch не содержит и не распространяет игры, прошивки, ключи шифрования или иной защищённый авторским правом контент.
 
@@ -193,3 +193,14 @@ Sakura Switch не содержит и не распространяет игр�
 
 Nintendo Switch является товарным знаком Nintendo.  
 Sakura Switch является независимым проектом и не связан с Nintendo, не поддерживается и не одобрен Nintendo.
+
+---
+
+## 📜 Лицензия
+
+Исходный код **Sakura Switch** доступен для изучения, некоммерческого использования, модификации и распространения в соответствии с **PolyForm Noncommercial License 1.0.0**.
+
+**Коммерческое использование Sakura Switch и производных работ без предварительного письменного разрешения правообладателя не разрешается.**
+
+Copyright © 2026 Amir Borisov.  
+См. `LICENSE.md` и `NOTICE`.
