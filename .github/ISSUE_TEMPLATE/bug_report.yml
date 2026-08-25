@@ -1,0 +1,69 @@
+name: 🐛 Сообщить об ошибке
+description: Сообщить о проблеме в Sakura Switch
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        🌸 Спасибо, что помогаете улучшать Sakura Switch.
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия Sakura Switch
+      placeholder: "v1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: Версия macOS
+      placeholder: "macOS 15.x"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Способ подключения
+      options:
+        - MTP
+        - DBI Backend
+        - FTP
+        - SD-карта
+        - Другое
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Описание проблемы
+      description: Что произошло?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      description: Опишите действия, после которых возникает проблема.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Журнал Sakura Switch
+      description: Вставьте сюда журнал приложения, если он доступен.
+      render: shell
+
+  - type: checkboxes
+    id: legal
+    attributes:
+      label: Подтверждение
+      options:
+        - label: Я не прикладываю игры, ключи шифрования, прошивки или другой защищённый авторским правом контент.
+          required: true

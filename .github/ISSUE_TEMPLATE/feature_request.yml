@@ -1,0 +1,39 @@
+name: ✨ Предложить функцию
+description: Предложить новую возможность для Sakura Switch
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        🌸 Спасибо за идею и интерес к развитию Sakura Switch.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Что вы предлагаете?
+      description: Опишите новую функцию или улучшение.
+    validations:
+      required: true
+
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Какую задачу это решает?
+      description: Расскажите, чем эта возможность будет полезна пользователям Sakura Switch.
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Как это могло бы работать?
+      description: Если есть идеи по реализации или интерфейсу, опишите их здесь.
+
+  - type: checkboxes
+    id: legal
+    attributes:
+      label: Подтверждение
+      options:
+        - label: Предложение не предполагает распространение игр, ключей шифрования, прошивок или другого защищённого авторским правом контента.
+          required: true
