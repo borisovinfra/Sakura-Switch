@@ -13,6 +13,7 @@ TARGET_APP="/Applications/${APP_NAME}.app"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
+FRAMEWORKS_DIR="${CONTENTS_DIR}/Frameworks"
 ICON_SOURCE="$ROOT_DIR/Assets/${ICON_NAME}"
 INSTALL_TO_APPLICATIONS=false
 APP_VERSION="$(git -C "$ROOT_DIR" describe --tags --abbrev=0 2>/dev/null || printf "dev")"
@@ -39,11 +40,69 @@ swift build --package-path "$ROOT_DIR" -c release --quiet
 
 echo "Creating app bundle..."
 rm -rf "${APP_DIR}"
-mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
+mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${FRAMEWORKS_DIR}"
 
 # Copy executable
 cp "${BUILD_DIR}/${EXECUTABLE_NAME}" "${MACOS_DIR}/${EXECUTABLE_NAME}"
 chmod +x "${MACOS_DIR}/${EXECUTABLE_NAME}"
+
+# Bundle libmtp + libusb inside the application.
+# Homebrew is required only on the machine that builds Sakura Switch.
+if ! command -v brew >/dev/null 2>&1; then
+    echo "❌ Homebrew is required on the build machine."
+    exit 1
+fi
+
+LIBMTP_PREFIX="$(brew --prefix libmtp)"
+LIBUSB_PREFIX="$(brew --prefix libusb)"
+
+LIBMTP_SOURCE="${LIBMTP_PREFIX}/lib/libmtp.9.dylib"
+LIBUSB_SOURCE="${LIBUSB_PREFIX}/lib/libusb-1.0.0.dylib"
+
+LIBMTP_BUNDLED="${FRAMEWORKS_DIR}/libmtp.9.dylib"
+LIBUSB_BUNDLED="${FRAMEWORKS_DIR}/libusb-1.0.0.dylib"
+
+if [[ ! -f "${LIBMTP_SOURCE}" ]]; then
+    echo "❌ libmtp not found: ${LIBMTP_SOURCE}"
+    exit 1
+fi
+
+if [[ ! -f "${LIBUSB_SOURCE}" ]]; then
+    echo "❌ libusb not found: ${LIBUSB_SOURCE}"
+    exit 1
+fi
+
+cp "${LIBMTP_SOURCE}" "${LIBMTP_BUNDLED}"
+cp "${LIBUSB_SOURCE}" "${LIBUSB_BUNDLED}"
+
+chmod 755 "${LIBMTP_BUNDLED}" "${LIBUSB_BUNDLED}"
+
+# Make bundled libraries relocatable.
+install_name_tool \
+    -id "@rpath/libmtp.9.dylib" \
+    "${LIBMTP_BUNDLED}"
+
+install_name_tool \
+    -id "@rpath/libusb-1.0.0.dylib" \
+    "${LIBUSB_BUNDLED}"
+
+# libmtp loads the bundled libusb beside itself.
+install_name_tool \
+    -change "${LIBUSB_SOURCE}" \
+    "@loader_path/libusb-1.0.0.dylib" \
+    "${LIBMTP_BUNDLED}"
+
+# Sakura loads both libraries from Contents/Frameworks.
+install_name_tool \
+    -change "${LIBMTP_SOURCE}" \
+    "@executable_path/../Frameworks/libmtp.9.dylib" \
+    "${MACOS_DIR}/${EXECUTABLE_NAME}"
+
+install_name_tool \
+    -change "${LIBUSB_SOURCE}" \
+    "@executable_path/../Frameworks/libusb-1.0.0.dylib" \
+    "${MACOS_DIR}/${EXECUTABLE_NAME}"
+
 
 if [[ -f "${ICON_SOURCE}" ]]; then
     cp "${ICON_SOURCE}" "${RESOURCES_DIR}/${ICON_NAME}"
@@ -90,6 +149,33 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+# install_name_tool modifies Mach-O files, so create a fresh ad-hoc signature.
+codesign --force --deep --sign - "${APP_DIR}"
+
+echo ""
+echo "Verifying bundled runtime dependencies..."
+
+echo "--- SakuraSwitch ---"
+otool -L "${MACOS_DIR}/${EXECUTABLE_NAME}"
+
+echo "--- libmtp ---"
+otool -L "${LIBMTP_BUNDLED}"
+
+echo "--- libusb ---"
+otool -L "${LIBUSB_BUNDLED}"
+
+if otool -L \
+    "${MACOS_DIR}/${EXECUTABLE_NAME}" \
+    "${LIBMTP_BUNDLED}" \
+    "${LIBUSB_BUNDLED}" \
+    | grep -Eq '/usr/local/opt/|/opt/homebrew/opt/'; then
+    echo "❌ Build still contains Homebrew runtime dependencies."
+    exit 1
+fi
+
+echo "✅ Runtime libraries are self-contained."
+
 
 echo ""
 echo "✅ ${APP_DIR} ready!"
