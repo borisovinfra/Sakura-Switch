@@ -114,6 +114,42 @@ if [[ -f "${LOGO_SOURCE}" ]]; then
     cp "${LOGO_SOURCE}" "${RESOURCES_DIR}/SakuraLogo.png"
 fi
 
+# Bundle Sakura Switch license and third-party license notices.
+SAKURA_LICENSE_SOURCE="$ROOT_DIR/LICENSE.md"
+SAKURA_NOTICE_SOURCE="$ROOT_DIR/NOTICE"
+THIRD_PARTY_NOTICES_SOURCE="$ROOT_DIR/THIRD_PARTY_NOTICES.md"
+THIRD_PARTY_LICENSES_SOURCE="$ROOT_DIR/ThirdPartyLicenses"
+
+if [[ ! -f "${SAKURA_LICENSE_SOURCE}" ]]; then
+    echo "❌ Missing LICENSE.md"
+    exit 1
+fi
+
+if [[ ! -f "${SAKURA_NOTICE_SOURCE}" ]]; then
+    echo "❌ Missing NOTICE"
+    exit 1
+fi
+
+if [[ ! -f "${THIRD_PARTY_NOTICES_SOURCE}" ]]; then
+    echo "❌ Missing THIRD_PARTY_NOTICES.md"
+    exit 1
+fi
+
+if [[ ! -f "${THIRD_PARTY_LICENSES_SOURCE}/LGPL-2.1.txt" ]]; then
+    echo "❌ Missing ThirdPartyLicenses/LGPL-2.1.txt"
+    exit 1
+fi
+
+cp "${SAKURA_LICENSE_SOURCE}"    "${RESOURCES_DIR}/LICENSE.md"
+
+cp "${SAKURA_NOTICE_SOURCE}"    "${RESOURCES_DIR}/NOTICE"
+
+cp "${THIRD_PARTY_NOTICES_SOURCE}"    "${RESOURCES_DIR}/THIRD_PARTY_NOTICES.md"
+
+mkdir -p "${RESOURCES_DIR}/ThirdPartyLicenses"
+
+cp "${THIRD_PARTY_LICENSES_SOURCE}/LGPL-2.1.txt"    "${RESOURCES_DIR}/ThirdPartyLicenses/LGPL-2.1.txt"
+
 # Create Info.plist
 cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
