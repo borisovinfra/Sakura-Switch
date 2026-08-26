@@ -19,7 +19,7 @@
 
 **macOS 15.0+**
 
-[**🌸 Скачать Sakura Switch v1.0.1**](https://github.com/borisovinfra/Sakura-Switch/releases/latest)
+[**🌸 Скачать Sakura Switch v1.0.2**](https://github.com/borisovinfra/Sakura-Switch/releases/latest)
 
 </div>
 
@@ -131,7 +131,7 @@
 ## 📦 Установка Sakura Switch
 
 1. Перейдите в [**Releases**](https://github.com/borisovinfra/Sakura-Switch/releases/latest).
-2. Скачайте `Sakura-Switch-v1.0.1.zip`.
+2. Скачайте `Sakura-Switch-v1.0.2.zip`.
 3. Распакуйте архив.
 4. Переместите `Sakura Switch.app` в папку `Applications`.
 5. Запустите приложение.
@@ -162,11 +162,11 @@ Sakura Switch пока распространяется без подписи Ap
 
 ---
 
-## 🌸 Sakura Switch v1.0.1
+## 🌸 Sakura Switch v1.0.2
 
 ![Sakura Switch](Assets/screenshots/06-about.png)
 
-Первый стабильный публичный релиз **Project Sakura**.
+Актуальный стабильный релиз **Project Sakura**.
 
 ---
 
@@ -176,7 +176,7 @@ Sakura Switch пока распространяется без подписи Ap
 
 Made for the Nintendo Switch community.
 
-**Sakura Switch v1.0.1**
+**Sakura Switch v1.0.2**
 
 </div>
 
