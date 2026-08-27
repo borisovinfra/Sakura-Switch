@@ -14,6 +14,9 @@ CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 FRAMEWORKS_DIR="${CONTENTS_DIR}/Frameworks"
+HELPERS_DIR="${CONTENTS_DIR}/Helpers"
+HELPER_SOURCE="$ROOT_DIR/Resources/Helper/sakuraswitch-mtp-helper.c"
+HELPER_BINARY="${HELPERS_DIR}/sakuraswitch-mtp-helper"
 ICON_SOURCE="$ROOT_DIR/Assets/${ICON_NAME}"
 INSTALL_TO_APPLICATIONS=false
 APP_VERSION="$(git -C "$ROOT_DIR" describe --tags --abbrev=0 2>/dev/null || printf "dev")"
@@ -40,11 +43,26 @@ swift build --package-path "$ROOT_DIR" -c release --quiet
 
 echo "Creating app bundle..."
 rm -rf "${APP_DIR}"
-mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${FRAMEWORKS_DIR}"
+mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${FRAMEWORKS_DIR}" "${HELPERS_DIR}"
 
 # Copy executable
 cp "${BUILD_DIR}/${EXECUTABLE_NAME}" "${MACOS_DIR}/${EXECUTABLE_NAME}"
 chmod +x "${MACOS_DIR}/${EXECUTABLE_NAME}"
+
+# Build bundled privileged MTP helper.
+if [[ ! -f "${HELPER_SOURCE}" ]]; then
+    echo "❌ MTP helper source not found: ${HELPER_SOURCE}"
+    exit 1
+fi
+
+echo "Building bundled MTP helper..."
+
+cc -O2 \
+    "${HELPER_SOURCE}" \
+    -o "${HELPER_BINARY}" \
+    $(pkg-config --cflags --libs libmtp libusb-1.0)
+
+chmod 755 "${HELPER_BINARY}"
 
 # Bundle libmtp + libusb inside the application.
 # Homebrew is required only on the machine that builds Sakura Switch.
@@ -91,6 +109,17 @@ install_name_tool \
     -change "${LIBUSB_SOURCE}" \
     "@loader_path/libusb-1.0.0.dylib" \
     "${LIBMTP_BUNDLED}"
+
+# Bundled MTP helper loads libraries from Contents/Frameworks.
+install_name_tool \
+    -change "${LIBMTP_SOURCE}" \
+    "@loader_path/../Frameworks/libmtp.9.dylib" \
+    "${HELPER_BINARY}"
+
+install_name_tool \
+    -change "${LIBUSB_SOURCE}" \
+    "@loader_path/../Frameworks/libusb-1.0.0.dylib" \
+    "${HELPER_BINARY}"
 
 # Sakura loads both libraries from Contents/Frameworks.
 install_name_tool \

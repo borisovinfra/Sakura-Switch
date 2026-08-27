@@ -155,6 +155,8 @@ public final class InstallationCoordinator {
         sourceURL: URL,
         destinationPath: String
     ) async throws {
+        try await PrivilegedMTPHelper.installIfNeeded()
+
 
         try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<Void, any Error>) in
@@ -231,7 +233,7 @@ public final class InstallationCoordinator {
 
                     process.arguments = [
                         "-n",
-                        "/usr/local/libexec/sakuraswitch-mtp-helper",
+                        PrivilegedMTPHelper.installedPath,
                         "--upload-path",
                         String(storageId),
                         destinationPath,
@@ -302,6 +304,8 @@ public final class InstallationCoordinator {
         fileName: String,
         destinationURL: URL
     ) async throws {
+        try await PrivilegedMTPHelper.installIfNeeded()
+
         try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<Void, any Error>) in
 
@@ -313,7 +317,7 @@ public final class InstallationCoordinator {
 
                 process.arguments = [
                     "-n",
-                    "/usr/local/libexec/sakuraswitch-mtp-helper",
+                    PrivilegedMTPHelper.installedPath,
                     "--download-path",
                     String(storageId),
                     directoryPath,
@@ -680,6 +684,8 @@ public final class InstallationCoordinator {
         arguments: [String],
         fallbackError: String
     ) async throws {
+        try await PrivilegedMTPHelper.installIfNeeded()
+
 
         NSLog("🌸 HELPER CALL \(arguments)")
 
@@ -694,7 +700,7 @@ public final class InstallationCoordinator {
 
                 process.arguments = [
                     "-n",
-                    "/usr/local/libexec/sakuraswitch-mtp-helper"
+                    PrivilegedMTPHelper.installedPath
                 ] + arguments
 
                 let pipe = Pipe()
@@ -747,8 +753,10 @@ public final class InstallationCoordinator {
         storageId: UInt32,
         path: String
     ) async throws -> [SDCardItem] {
+        try await PrivilegedMTPHelper.installIfNeeded()
 
-        try await withCheckedThrowingContinuation { continuation in
+
+        return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
 
                 let process = Process()
@@ -758,7 +766,7 @@ public final class InstallationCoordinator {
 
                 process.arguments = [
                     "-n",
-                    "/usr/local/libexec/sakuraswitch-mtp-helper",
+                    PrivilegedMTPHelper.installedPath,
                     "--browse-path",
                     String(storageId),
                     path
@@ -888,8 +896,10 @@ public final class InstallationCoordinator {
     /// Unlike connectMTPBrowser(), this does not keep a libmtp session
     /// around and is safe to use before raw-MTP browsing.
     public func loadMTPStoragesViaHelper() async throws -> [MTPStorage] {
+        try await PrivilegedMTPHelper.installIfNeeded()
 
-        try await withCheckedThrowingContinuation {
+
+        return try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<[MTPStorage], any Error>) in
 
             DispatchQueue.global(qos: .userInitiated).async {
@@ -901,7 +911,7 @@ public final class InstallationCoordinator {
 
                 process.arguments = [
                     "-n",
-                    "/usr/local/libexec/sakuraswitch-mtp-helper",
+                    PrivilegedMTPHelper.installedPath,
                     "--storages"
                 ]
 

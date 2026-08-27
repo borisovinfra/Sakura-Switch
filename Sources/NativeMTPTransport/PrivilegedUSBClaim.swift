@@ -13,6 +13,8 @@ public enum PrivilegedUSBClaim {
     /// Prompts the user for their admin password.
     /// After this returns, the device is available for normal IOUSBHost access.
     public static func claimDevice(vendorID: UInt16, productID: UInt16) async throws {
+        try await PrivilegedMTPHelper.installIfNeeded()
+
         guard vendorID == 0x057E, productID == 0x201D else {
             throw IOUSBHostError.claimFailed("Unsupported USB device")
         }
@@ -23,7 +25,7 @@ public enum PrivilegedUSBClaim {
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
                 process.arguments = [
                     "-n",
-                    "/usr/local/libexec/sakuraswitch-mtp-helper",
+                    PrivilegedMTPHelper.installedPath,
                     "--claim-only"
                 ]
 

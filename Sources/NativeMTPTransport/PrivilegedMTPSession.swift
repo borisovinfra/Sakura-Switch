@@ -44,6 +44,8 @@ public final class PrivilegedMTPSession: @unchecked Sendable {
         onProgress: @escaping ProgressHandler,
         onLog: @escaping LogHandler
     ) async throws {
+        try await PrivilegedMTPHelper.installIfNeeded()
+
         // Copy files to /tmp so the privileged (root) process can access them.
         // macOS TCC blocks root from reading user directories.
         let stagingDir = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
@@ -67,7 +69,7 @@ public final class PrivilegedMTPSession: @unchecked Sendable {
 
         var arguments = [
             "-n",
-            "/usr/local/libexec/sakuraswitch-mtp-helper",
+            PrivilegedMTPHelper.installedPath,
             String(targetStorageID ?? 0)
         ]
 
