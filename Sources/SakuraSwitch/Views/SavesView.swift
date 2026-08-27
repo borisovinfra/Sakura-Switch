@@ -58,7 +58,11 @@ struct SavesView: View {
             maxHeight: .infinity
         )
         .task {
-            if saveGames.isEmpty && !isLoadingGames {
+            // Do not query DBI Saves before the USB/MTP monitor
+            // has confirmed that the Switch is actually connected.
+            if appState.isDeviceConnected &&
+               saveGames.isEmpty &&
+               !isLoadingGames {
                 await loadGames()
             }
         }
@@ -289,9 +293,10 @@ struct SavesView: View {
                         message: entriesError
                     ) {
                         Task {
-                            await loadEntries(
-                                for: game
-                            )
+                            // Reload the complete DBI Saves tree.
+                            // After a fresh MTP connection DBI may expose
+                            // new object handles and full game folder names.
+                            await loadGames()
                         }
                     }
 
