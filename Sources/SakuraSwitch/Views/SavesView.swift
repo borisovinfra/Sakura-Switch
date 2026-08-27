@@ -62,6 +62,15 @@ struct SavesView: View {
                 await loadGames()
             }
         }
+        .onChange(of: appState.isDeviceConnected) { _, connected in
+            guard connected else { return }
+
+            Task {
+                // DBI exposes fresh MTP object handles after every USB reconnect.
+                // Reload Sakura Saves automatically instead of keeping stale state.
+                await loadGames()
+            }
+        }
     }
 
     // MARK: - Header
