@@ -37,39 +37,41 @@ struct AboutView: View {
 
             VStack(alignment: .leading, spacing: 10) {
 
-                Text("Инструмент управления Nintendo Switch")
+                Text(L10n.aboutToolkit)
                     .font(.headline)
 
                 Text(
-                    "Версия: \(BundleAppVersionProvider().displayVersion)"
+                    String(
+                        format: L10n.aboutVersionFormat,
+                        BundleAppVersionProvider().displayVersion
+                    )
                 )
 
-                Text("Возможности:")
+                Text(L10n.aboutFeatures)
                     .font(.headline)
                     .padding(.top, 8)
 
-                Text("• Atmosphère Contents")
-                Text("• Установка модификаций")
-                Text("• Работа с SD-картой")
-                Text("• Управление сохранениями")
-                Text("• Галерея")
+                Text(L10n.aboutAtmosphereContents)
+                Text(L10n.aboutModInstallation)
+                Text(L10n.aboutSDCard)
+                Text(L10n.aboutSaves)
             }
             .frame(maxWidth: 420, alignment: .leading)
 
             Spacer()
 
             VStack(spacing: 2) {
-                Text("Special thanks 🌸")
+                Text(L10n.aboutSpecialThanks)
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
                     .opacity(0.55)
 
-                Text("First blossom — digdat0")
+                Text(L10n.aboutFirstBlossom)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .opacity(0.80)
 
-                Text("Our first public supporter, and the first person to believe in Sakura Switch.")
+                Text(L10n.aboutFirstSupporter)
                     .font(.system(size: 8))
                     .foregroundStyle(.secondary)
                     .opacity(0.45)

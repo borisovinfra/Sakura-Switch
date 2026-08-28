@@ -49,6 +49,20 @@ mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${FRAMEWORKS_DIR}" "${HELPERS_DIR}"
 cp "${BUILD_DIR}/${EXECUTABLE_NAME}" "${MACOS_DIR}/${EXECUTABLE_NAME}"
 chmod +x "${MACOS_DIR}/${EXECUTABLE_NAME}"
 
+# Bundle localized strings in the standard macOS app location.
+for lang in ru en ja; do
+    SOURCE_LPROJ="$ROOT_DIR/Sources/SakuraSwitch/Resources/${lang}.lproj"
+    TARGET_LPROJ="${RESOURCES_DIR}/${lang}.lproj"
+
+    if [[ ! -d "${SOURCE_LPROJ}" ]]; then
+        echo "❌ Missing localization: ${SOURCE_LPROJ}"
+        exit 1
+    fi
+
+    mkdir -p "${TARGET_LPROJ}"
+    cp "${SOURCE_LPROJ}/Localizable.strings"        "${TARGET_LPROJ}/Localizable.strings"
+done
+
 # Build bundled privileged MTP helper.
 if [[ ! -f "${HELPER_SOURCE}" ]]; then
     echo "❌ MTP helper source not found: ${HELPER_SOURCE}"
@@ -193,6 +207,14 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <string>Sakura Switch</string>
     <key>CFBundleDisplayName</key>
     <string>Sakura Switch</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>ru</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>ru</string>
+        <string>en</string>
+        <string>ja</string>
+    </array>
     <key>CFBundleIconFile</key>
     <string>SakuraSwitch.icns</string>
     <key>CFBundleVersion</key>

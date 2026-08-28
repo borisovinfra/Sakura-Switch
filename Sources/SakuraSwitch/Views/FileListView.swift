@@ -7,9 +7,9 @@ struct FileListView: View {
     var body: some View {
         if files.isEmpty {
             ContentUnavailableView(
-                "Нет файлов в очереди",
+                L10n.noFiles,
                 systemImage: "tray",
-                description: Text("Перетащите файлы игр сюда, чтобы начать")
+                description: Text(L10n.noFilesDescription)
             )
         } else {
             List(files) { file in

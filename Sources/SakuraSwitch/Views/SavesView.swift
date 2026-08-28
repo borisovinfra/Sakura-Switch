@@ -84,7 +84,7 @@ struct SavesView: View {
 
             VStack(alignment: .leading, spacing: 2) {
 
-                Text("Сохранения")
+                Text(L10n.savesTitle)
                     .font(.title2.weight(.semibold))
 
                 Text("Sakura Saves")
@@ -100,7 +100,7 @@ struct SavesView: View {
                 }
             } label: {
                 Label(
-                    "Обновить",
+                    L10n.savesRefresh,
                     systemImage: "arrow.clockwise"
                 )
             }
@@ -118,13 +118,13 @@ struct SavesView: View {
         if isLoadingGames {
 
             loadingView(
-                "Загрузка сохранений..."
+                L10n.savesLoading
             )
 
         } else if let gamesError {
 
             errorView(
-                title: "Не удалось загрузить сохранения",
+                title: L10n.savesLoadFailed,
                 message: gamesError
             ) {
                 Task {
@@ -174,17 +174,17 @@ struct SavesView: View {
                 )
                 .foregroundStyle(.secondary)
 
-            Text("Сохранения не найдены")
+            Text(L10n.savesNotFound)
                 .font(.headline)
 
             Text(
-                "Подключите Switch с запущенным DBI MTP responder."
+                L10n.savesConnectHint
             )
             .font(.caption)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
 
-            Button("Загрузить сохранения") {
+            Button(L10n.savesLoadButton) {
                 Task {
                     await loadGames()
                 }
@@ -282,14 +282,14 @@ struct SavesView: View {
                 if isLoadingEntries {
 
                     loadingView(
-                        "Загрузка сохранений игры..."
+                        L10n.savesGameLoading
                     )
 
                 } else if let entriesError {
 
                     errorView(
                         title:
-                            "Не удалось открыть сохранения",
+                            L10n.savesOpenFailed,
                         message: entriesError
                     ) {
                         Task {
@@ -383,11 +383,11 @@ struct SavesView: View {
                 )
                 .foregroundStyle(.secondary)
 
-            Text("Выберите игру")
+            Text(L10n.savesSelectGame)
                 .font(.headline)
 
             Text(
-                "Здесь появятся пользователи и типы сохранений."
+                L10n.savesSelectGameHint
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -413,7 +413,7 @@ struct SavesView: View {
                 )
                 .foregroundStyle(.secondary)
 
-            Text("Сохранения не найдены")
+            Text(L10n.savesNotFound)
                 .font(.headline)
         }
         .frame(
@@ -517,10 +517,10 @@ struct SavesView: View {
                             ProgressView()
                                 .controlSize(.small)
 
-                            Text("Копирование...")
+                            Text(L10n.savesCopying)
                         } else {
                             Label(
-                                "Создать резервную копию",
+                                L10n.savesCreateBackup,
                                 systemImage:
                                     "externaldrive.badge.plus"
                             )
@@ -541,10 +541,10 @@ struct SavesView: View {
                             ProgressView()
                                 .controlSize(.small)
 
-                            Text("Восстановление...")
+                            Text(L10n.savesRestoring)
                         } else {
                             Label(
-                                "Восстановить",
+                                L10n.savesRestore,
                                 systemImage: "arrow.uturn.backward.circle"
                             )
                         }
@@ -600,14 +600,14 @@ struct SavesView: View {
                 if isLoadingSaveFiles {
 
                     loadingView(
-                        "Загрузка файлов сохранения..."
+                        L10n.savesFilesLoading
                     )
 
                 } else if let saveFilesError {
 
                     errorView(
                         title:
-                            "Не удалось открыть сохранение",
+                            L10n.savesSaveOpenFailed,
                         message: saveFilesError
                     ) {
 
@@ -640,7 +640,7 @@ struct SavesView: View {
                                 .secondary
                             )
 
-                        Text("Файлы не найдены")
+                        Text(L10n.savesFilesNotFound)
                             .font(.headline)
                     }
                     .frame(
@@ -710,11 +710,11 @@ struct SavesView: View {
                 )
                 .foregroundStyle(.secondary)
 
-                Text("Выберите сохранение")
+                Text(L10n.savesSelectSave)
                     .font(.headline)
 
                 Text(
-                    "Например, Amir или BCAT."
+                    L10n.savesSelectSaveHint
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -743,10 +743,10 @@ struct SavesView: View {
         let panel = NSOpenPanel()
 
         panel.title =
-            "Выберите резервную копию Sakura Saves"
+            L10n.savesChooseBackup
 
         panel.prompt =
-            "Выбрать копию"
+            L10n.savesChooseBackupButton
 
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -771,23 +771,23 @@ struct SavesView: View {
             alert.alertStyle = .warning
 
             alert.messageText =
-                "Восстановить сохранение?"
+                L10n.savesRestoreQuestion
 
             alert.informativeText =
                 """
-                Игра: \(displayName(game.name))
-                Сохранение: \(entry.name)
-                Файлов: \(files.count)
+                \(L10n.savesRestoreGame): \(displayName(game.name))
+                \(L10n.savesRestoreSave): \(entry.name)
+                \(L10n.savesRestoreFiles): \(files.count)
 
-                Перед записью Sakura Switch автоматически создаст аварийную копию текущего сохранения.
+                \(L10n.savesRestoreEmergencyWarning)
                 """
 
             alert.addButton(
-                withTitle: "Восстановить"
+                withTitle: L10n.savesRestoreConfirm
             )
 
             alert.addButton(
-                withTitle: "Отмена"
+                withTitle: L10n.cancel
             )
 
             guard
@@ -895,7 +895,7 @@ struct SavesView: View {
             )
 
             appState.coordinator.log(
-                "Sakura Saves Restore: аварийная копия создана — \(emergencyRoot.path)",
+                L10n.savesLogEmergencyCreated(emergencyRoot.path),
                 level: .info
             )
 
@@ -952,10 +952,10 @@ struct SavesView: View {
                 )
 
                 restoreStatus =
-                    "Восстановление завершено. Аварийная копия: \(emergencyRoot.path)"
+                    L10n.savesRestoreCompleted(emergencyRoot.path)
 
                 appState.coordinator.log(
-                    "Sakura Saves: восстановление завершено — \(displayName(game.name)) / \(entry.name)",
+                    L10n.savesLogRestoreCompleted(displayName(game.name), entry.name),
                     level: .info
                 )
 
@@ -967,7 +967,7 @@ struct SavesView: View {
             } catch {
 
                 appState.coordinator.log(
-                    "Sakura Saves Restore: ошибка записи, запускается откат",
+                    L10n.savesLogRestoreWriteFailed,
                     level: .error
                 )
 
@@ -1001,7 +1001,7 @@ struct SavesView: View {
                 error.localizedDescription
 
             appState.coordinator.log(
-                "Ошибка Sakura Saves Restore: \(error.localizedDescription)",
+                L10n.savesLogRestoreError(error.localizedDescription),
                 level: .error
             )
         }
@@ -1337,45 +1337,45 @@ struct SavesView: View {
 
             case .invalidBackupFolder:
                 return
-                    "Выбрана некорректная папка резервной копии."
+                    L10n.savesInvalidBackupFolder()
 
             case .emptyBackup:
                 return
-                    "В выбранной резервной копии нет файлов."
+                    L10n.savesEmptyBackup()
 
             case .unsupportedNestedDirectories:
                 return
-                    "Эта версия Restore пока поддерживает только сохранения без вложенных папок. Запись отменена."
+                    L10n.savesNestedDirectoriesUnsupported()
 
             case .emergencyBackupVerificationFailed(
                 let file
             ):
                 return
-                    "Аварийная резервная копия не прошла проверку: \(file). Восстановление отменено до записи на Switch."
+                    L10n.savesEmergencyVerificationFailed(file)
 
             case .verificationMissingFile(
                 let file
             ):
                 return
-                    "После восстановления на Switch не найден файл: \(file)."
+                    L10n.savesVerificationMissingFile(file)
 
             case .verificationSizeMismatch(
                 let file
             ):
                 return
-                    "После восстановления размер файла не совпадает: \(file)."
+                    L10n.savesVerificationSizeMismatch(file)
 
             case .restoreFailedButRolledBack(
                 let reason
             ):
                 return
-                    "Восстановление не удалось, но исходный сейв автоматически возвращён. Причина: \(reason)"
+                    L10n.savesRestoreRolledBack(reason)
 
             case .rollbackFailed(
                 let reason
             ):
                 return
-                    "Ошибка восстановления и автоматического отката. Аварийная копия сохранена на Mac. Причина: \(reason)"
+                    L10n.savesRollbackFailed(reason)
             }
         }
     }
@@ -1395,10 +1395,10 @@ struct SavesView: View {
         let panel = NSOpenPanel()
 
         panel.title =
-            "Выберите папку для резервной копии"
+            L10n.savesBackupFolderTitle
 
         panel.prompt =
-            "Создать резервную копию"
+            L10n.savesBackupFolderPrompt
 
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -1524,20 +1524,20 @@ struct SavesView: View {
             }
 
             backupStatus =
-                "Резервная копия создана: \(backupRoot.path)"
+                L10n.savesBackupCreated(backupRoot.path)
 
             appState.coordinator.log(
-                "Sakura Saves: резервная копия создана — \(backupRoot.path)",
+                L10n.savesLogBackupCreated(backupRoot.path),
                 level: .info
             )
 
         } catch {
 
             backupError =
-                "Ошибка резервного копирования: \(error.localizedDescription)"
+                L10n.savesBackupFailed(error.localizedDescription)
 
             appState.coordinator.log(
-                "Ошибка Sakura Saves Backup: \(error.localizedDescription)",
+                L10n.savesLogBackupError(error.localizedDescription),
                 level: .error
             )
         }
@@ -1696,7 +1696,7 @@ struct SavesView: View {
                 .textSelection(.enabled)
 
             Button(
-                "Повторить",
+                L10n.savesRetry,
                 action: retry
             )
         }
@@ -1740,7 +1740,7 @@ struct SavesView: View {
                     .loadInstalledSaveGames()
 
             appState.coordinator.log(
-                "Sakura Saves: найдено игр с сохранениями: \(saveGames.count)",
+                L10n.savesLogGamesFound(saveGames.count),
                 level: .info
             )
 
@@ -1750,7 +1750,7 @@ struct SavesView: View {
                 error.localizedDescription
 
             appState.coordinator.log(
-                "Ошибка Sakura Saves: \(error.localizedDescription)",
+                L10n.savesLogError(error.localizedDescription),
                 level: .error
             )
         }
@@ -1799,7 +1799,7 @@ struct SavesView: View {
                     )
 
             appState.coordinator.log(
-                "Sakura Saves: \(displayName(game.name)) — найдено сохранений: \(saveEntries.count)",
+                L10n.savesLogEntriesFound(displayName(game.name), saveEntries.count),
                 level: .info
             )
 
@@ -1809,7 +1809,7 @@ struct SavesView: View {
                 error.localizedDescription
 
             appState.coordinator.log(
-                "Ошибка Sakura Saves: \(error.localizedDescription)",
+                L10n.savesLogError(error.localizedDescription),
                 level: .error
             )
         }
@@ -1855,7 +1855,7 @@ struct SavesView: View {
                     )
 
             appState.coordinator.log(
-                "Sakura Saves: \(displayName(game.name)) / \(entry.name) — файлов: \(saveFiles.count)",
+                L10n.savesLogFilesFound(displayName(game.name), entry.name, saveFiles.count),
                 level: .info
             )
 
@@ -1865,7 +1865,7 @@ struct SavesView: View {
                 error.localizedDescription
 
             appState.coordinator.log(
-                "Ошибка Sakura Saves: \(error.localizedDescription)",
+                L10n.savesLogError(error.localizedDescription),
                 level: .error
             )
         }

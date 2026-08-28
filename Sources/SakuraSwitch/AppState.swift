@@ -94,13 +94,13 @@ final class AppState {
     var installHelpText: String {
         switch coordinator.transportMode {
         case .dbiBackend:
-            "На Switch откройте DBI и выберите \"Run DBI backend\" перед подключением USB."
+            L10n.helpDBIBackend
         case .mtp:
-            "На Switch откройте DBI → \"Run MTP responder\"."
+            L10n.helpMTP
         case .sdCard:
-            "На Switch откройте DBI → \"Run MTP responder\" для доступа к SD-карте."
+            L10n.helpSDCard
         case .network:
-            "На Switch откройте DBI → Start FTP → Install on SD Card. Затем введите IP-адрес и порт, показанные на Switch."
+            L10n.helpFTP
         }
     }
 
@@ -156,23 +156,23 @@ final class AppState {
         var text = message
 
         let replacements: [(String, String)] = [
-            ("Starting MTP connection test...", "Запуск проверки MTP-соединения..."),
-            ("Testing MTP handshake (will ask for admin password)...", "Проверка MTP-соединения..."),
-            ("SUCCESS — MTP handshake completed!", "Соединение MTP установлено успешно"),
-            ("MTP handshake failed:", "Ошибка MTP-соединения:"),
-            ("Kernel driver release:", "Освобождение USB-драйвера:"),
-            ("Kernel driver released", "USB-драйвер освобождён"),
-            ("Kernel driver detach:", "Отключение USB-драйвера:"),
-            ("Switch opened through libmtp", "Nintendo Switch открыт через MTP"),
+            ("Starting MTP connection test...", L10n.mtpStartingTest),
+            ("Testing MTP handshake (will ask for admin password)...", L10n.mtpTestingHandshake),
+            ("SUCCESS — MTP handshake completed!", L10n.mtpHandshakeSuccess),
+            ("MTP handshake failed:", L10n.mtpHandshakeFailed),
+            ("Kernel driver release:", L10n.mtpKernelRelease),
+            ("Kernel driver released", L10n.mtpKernelReleased),
+            ("Kernel driver detach:", L10n.mtpKernelDetach),
+            ("Switch opened through libmtp", L10n.mtpSwitchOpened),
             ("Nintendo Switch / Switch Lite", "Nintendo Switch / Switch Lite"),
             ("Android device detected, assigning default bug flags",
-             "Устройство MTP обнаружено, применены параметры совместимости"),
-            ("Using storage", "Используется хранилище"),
-            ("SD Card install", "Установка на SD-карту"),
-            ("NAND install", "Установка в NAND"),
-            ("No MTP devices found", "MTP-устройство не найдено"),
-            ("Unable to open Switch through libmtp", "Не удалось открыть Nintendo Switch через MTP"),
-            ("Nintendo Switch DBI MTP device not found", "Nintendo Switch с запущенным DBI MTP не найден")
+             L10n.mtpCompatibility),
+            ("Using storage", L10n.mtpUsingStorage),
+            ("SD Card install", L10n.mtpInstallSD),
+            ("NAND install", L10n.mtpInstallNAND),
+            ("No MTP devices found", L10n.mtpNoDevices),
+            ("Unable to open Switch through libmtp", L10n.mtpUnableOpen),
+            ("Nintendo Switch DBI MTP device not found", L10n.mtpDBINotFound)
         ]
 
         for (source, destination) in replacements {
@@ -183,29 +183,29 @@ final class AppState {
         }
 
         if text.hasPrefix("Found: ") {
-            text = "Найдено устройство: " + text.dropFirst("Found: ".count)
+            text = L10n.mtpFoundDevice(String(text.dropFirst("Found: ".count)))
         }
 
         return text
     }
 
     private func runMTPDiagnostic() async {
-        logMTP("Запуск проверки MTP-соединения...", level: .info)
+        logMTP(L10n.mtpStartingTest, level: .info)
 
         // Step 1: Scan for device (no admin needed)
         let devices = USBDeviceScanner.findDevices(vendorID: NintendoSwitchUSB.vendorID)
         if devices.isEmpty {
-            logMTP("USB-устройство Nintendo не найдено", level: .error)
-            mtpTestResult = "ОШИБКА — Nintendo Switch не найден. Проверьте подключение и запуск DBI MTP."
+            logMTP(L10n.mtpUSBNotFound, level: .error)
+            mtpTestResult = L10n.mtpSwitchNotFound
             return
         }
         for d in devices {
-            logMTP("Найдено устройство: \(d.description)", level: .info)
+            logMTP(L10n.mtpFoundDevice(d.description), level: .info)
         }
 
         // Step 2: Run a quick MTP handshake test via PrivilegedMTPSession
         // This prompts for admin password, then does DeviceCapture → OpenSession → CloseSession
-        logMTP("Проверка MTP-соединения...", level: .info)
+        logMTP(L10n.mtpTestingHandshake, level: .info)
 
         let session = mtpSessionFactory()
         do {
@@ -218,12 +218,12 @@ final class AppState {
                     Task { @MainActor in self?.logMTP(msg, level: .debug) }
                 }
             )
-            logMTP("Соединение MTP установлено успешно", level: .info)
-            mtpTestResult = "УСПЕХ — доступ по MTP подтверждён!"
+            logMTP(L10n.mtpHandshakeSuccess, level: .info)
+            mtpTestResult = L10n.mtpSuccess
         } catch {
-            logMTP("Ошибка MTP-соединения: \(error.localizedDescription)", level: .error)
+            logMTP(L10n.mtpError(error.localizedDescription), level: .error)
             let found = devices.map(\.description).joined(separator: ", ")
-            mtpTestResult = "ОШИБКА — \(found). \(error.localizedDescription)"
+            mtpTestResult = L10n.mtpResultError(found, error.localizedDescription)
         }
     }
 
@@ -265,12 +265,12 @@ final class AppState {
         do {
             let exportedURL = try diagnosticsExportRunner.export(request: request, entries: coordinator.logs)
             if let exportedURL {
-                diagnosticsExportStatusMessage = "Диагностика сохранена: \(exportedURL.lastPathComponent)"
+                diagnosticsExportStatusMessage = L10n.diagnosticsSaved(exportedURL.lastPathComponent)
             } else {
-                diagnosticsExportStatusMessage = "Экспорт диагностики отменён."
+                diagnosticsExportStatusMessage = L10n.diagnosticsCancelled
             }
         } catch {
-            diagnosticsExportStatusMessage = "Ошибка экспорта диагностики: \(error.localizedDescription)"
+            diagnosticsExportStatusMessage = L10n.diagnosticsError(error.localizedDescription)
         }
     }
 
@@ -283,13 +283,13 @@ final class AppState {
         let address = coordinator.ftpAddress.trimmingCharacters(in: .whitespaces)
 
         if address.isEmpty {
-            ftpValidationError = "Введите IP-адрес, указанный на Switch"
+            ftpValidationError = L10n.ftpMissingAddress
             ftpAddressValidated = false
             return
         }
 
         guard FTPConnectionInfo.parse(address) != nil else {
-            ftpValidationError = "Неверный формат. Используйте IP:порт, например 192.168.0.96:5000"
+            ftpValidationError = L10n.ftpInvalidAddress
             ftpAddressValidated = false
             return
         }
@@ -315,7 +315,7 @@ final class AppState {
     func testSDCardBrowser() {
         Task {
             coordinator.log(
-                "Проверка доступа к SD-карте...",
+                L10n.sdChecking,
                 level: .info
             )
 
@@ -326,17 +326,17 @@ final class AppState {
                 let files = items.count - folders
 
                 coordinator.log(
-                    "SD-карта доступна",
+                    L10n.sdAvailable,
                     level: .info
                 )
 
                 coordinator.log(
-                    "Корень SD-карты: \(folders) папок, \(files) файлов",
+                    L10n.sdRootSummary(folders, files),
                     level: .info
                 )
 
                 coordinator.log(
-                    "Проверка SD-карты завершена успешно",
+                    L10n.sdCheckSuccess,
                     level: .info
                 )
 
@@ -344,15 +344,15 @@ final class AppState {
                 let message = error.localizedDescription
                     .replacingOccurrences(
                         of: "No MTP device found",
-                        with: "MTP-устройство не найдено"
+                        with: L10n.mtpNoDevices
                     )
                     .replacingOccurrences(
                         of: "DBI MTP device not found",
-                        with: "Nintendo Switch с запущенным DBI MTP не найден"
+                        with: L10n.mtpDBINotFound
                     )
 
                 coordinator.log(
-                    "Ошибка доступа к SD-карте: \(message)",
+                    L10n.sdAccessError(message),
                     level: .error
                 )
             }
@@ -360,7 +360,7 @@ final class AppState {
     }
 
     func testMTPConnection() {
-        mtpTestResult = "Проверка..."
+        mtpTestResult = L10n.mtpChecking
         Task {
             await runMTPDiagnostic()
         }

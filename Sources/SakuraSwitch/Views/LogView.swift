@@ -22,10 +22,10 @@ struct LogView: View {
 
     private var levelFilterBar: some View {
         Picker("", selection: $minimumLevel) {
-            Text("Все").tag(LogLevel.debug)
-            Text("Информация").tag(LogLevel.info)
-            Text("Предупреждения").tag(LogLevel.warning)
-            Text("Ошибки").tag(LogLevel.error)
+            Text(L10n.logAll).tag(LogLevel.debug)
+            Text(L10n.logInfo).tag(LogLevel.info)
+            Text(L10n.logWarnings).tag(LogLevel.warning)
+            Text(L10n.logErrors).tag(LogLevel.error)
         }
         .pickerStyle(.segmented)
         .padding(.horizontal, 8)
