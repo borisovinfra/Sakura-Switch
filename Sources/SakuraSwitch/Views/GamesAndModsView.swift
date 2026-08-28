@@ -97,7 +97,7 @@ struct GamesAndModsView: View {
                 spacing: 2
             ) {
 
-                Text("Игры и моды")
+                Text(L10n.modsTitle)
                     .font(
                         .title2.weight(
                             .semibold
@@ -116,9 +116,7 @@ struct GamesAndModsView: View {
             if !games.isEmpty {
 
 
-                Text(
-                    "Моды: \\(modded) / \\(games.count)"
-                )
+                Text(L10n.modsCounter(games.filter { $0.hasContents }.count, games.count))
                 .font(.caption)
                 .foregroundStyle(
                     .secondary
@@ -136,7 +134,7 @@ struct GamesAndModsView: View {
             } label: {
 
                 Label(
-                    "Обновить",
+                    L10n.modsRefresh,
                     systemImage: "arrow.clockwise"
                 )
 
@@ -158,7 +156,7 @@ struct GamesAndModsView: View {
             } label: {
 
                 Label(
-                    "Добавить мод",
+                    L10n.modsAdd,
                     systemImage: "plus.square.on.square"
                 )
 
@@ -183,8 +181,8 @@ struct GamesAndModsView: View {
 
                 Label(
                     isInstallingMod
-                    ? "Установка..."
-                    : "Установить мод",
+                    ? L10n.modsInstalling
+                    : L10n.modsInstall,
                     systemImage: "arrow.down.circle"
                 )
             }
@@ -208,14 +206,14 @@ struct GamesAndModsView: View {
         if isLoading {
 
             loadingView(
-                "Сканирование игр и модов..."
+                L10n.modsScanning
             )
 
         } else if let loadError {
 
             errorView(
                 title:
-                    "Не удалось загрузить игры",
+                    L10n.modsLoadFailed,
                 message:
                     loadError
             ) {
@@ -244,7 +242,7 @@ struct GamesAndModsView: View {
                 )
 
                 Text(
-                    "Установленные игры не найдены"
+                    L10n.modsNoGames
                 )
                 .font(.headline)
             }
@@ -333,8 +331,8 @@ struct GamesAndModsView: View {
 
                         Label(
                             game.contentsEnabled
-                                ? "Моды"
-                                : "Выкл.",
+                                ? L10n.modsBadgeEnabled
+                                : L10n.modsBadgeDisabled,
                             systemImage:
                                 game.contentsEnabled
                                 ? "puzzlepiece.extension.fill"
@@ -398,8 +396,8 @@ struct GamesAndModsView: View {
 
                             Label(
                                 game.contentsEnabled
-                                    ? "Моды включены"
-                                    : "Моды выключены",
+                                    ? L10n.modsEnabled
+                                    : L10n.modsDisabled,
                                 systemImage:
                                     game.contentsEnabled
                                     ? "checkmark.circle.fill"
@@ -433,8 +431,8 @@ struct GamesAndModsView: View {
 
                                     Label(
                                         game.contentsEnabled
-                                            ? "Отключить"
-                                            : "Включить",
+                                            ? L10n.modsDisable
+                                            : L10n.modsEnable,
                                         systemImage:
                                             game.contentsEnabled
                                             ? "pause.circle"
@@ -454,7 +452,7 @@ struct GamesAndModsView: View {
                         } else {
 
                             Text(
-                                "Моды не найдены"
+                                L10n.modsNotFound
                             )
                             .font(.caption)
                             .foregroundStyle(
@@ -534,12 +532,12 @@ struct GamesAndModsView: View {
                         )
 
                         Text(
-                            "Моды не обнаружены"
+                            L10n.modsNoneDetected
                         )
                         .font(.headline)
 
                         Text(
-                            "Для этой игры нет папки в atmosphere/contents."
+                            L10n.modsNoneHint
                         )
                         .font(.caption)
                         .foregroundStyle(
@@ -554,14 +552,14 @@ struct GamesAndModsView: View {
                 } else if isLoadingContents {
 
                     loadingView(
-                        "Чтение содержимого мода..."
+                        L10n.modsReadingContents
                     )
 
                 } else if let contentsError {
 
                     errorView(
                         title:
-                            "Не удалось открыть contents",
+                            L10n.modsOpenContentsFailed,
                         message:
                             contentsError
                     ) {
@@ -591,7 +589,7 @@ struct GamesAndModsView: View {
                             .secondary
                         )
 
-                        Text("Папка пуста")
+                        Text(L10n.modsFolderEmpty)
                             .font(.headline)
                     }
                     .frame(
@@ -694,11 +692,11 @@ struct GamesAndModsView: View {
                     .secondary
                 )
 
-                Text("Выберите игру")
+                Text(L10n.modsSelectGame)
                     .font(.headline)
 
                 Text(
-                    "Здесь появится содержимое atmosphere/contents/<Title ID>."
+                    L10n.modsSelectGameHint
                 )
                 .font(.caption)
                 .foregroundStyle(
@@ -894,7 +892,7 @@ struct GamesAndModsView: View {
                     }
 
             appState.coordinator.log(
-                "Sakura Mods: игр \(games.count), с contents \(games.filter { $0.hasContents }.count)",
+                L10n.modsLogGames(games.count, games.filter { $0.hasContents }.count),
                 level: .info
             )
 
@@ -904,7 +902,7 @@ struct GamesAndModsView: View {
                 error.localizedDescription
 
             appState.coordinator.log(
-                "Ошибка Sakura Mods: \(error.localizedDescription)",
+                L10n.modsLogError(error.localizedDescription),
                 level: .error
             )
         }
@@ -962,7 +960,7 @@ struct GamesAndModsView: View {
             else {
 
                 modStateError =
-                    "Некорректное имя отключённого мода."
+                    L10n.modsInvalidDisabledName
 
                 return
             }
@@ -990,7 +988,7 @@ struct GamesAndModsView: View {
                 )
 
             appState.coordinator.log(
-                "Sakura Mods: \(game.title) — \(game.contentsEnabled ? "отключены" : "включены")",
+                L10n.modsLogToggle(game.title, !game.contentsEnabled),
                 level: .info
             )
 
@@ -1023,7 +1021,7 @@ struct GamesAndModsView: View {
                 error.localizedDescription
 
             appState.coordinator.log(
-                "Ошибка Sakura Mods Toggle: \(error.localizedDescription)",
+                L10n.modsLogToggleError(error.localizedDescription),
                 level: .error
             )
         }
@@ -1059,7 +1057,7 @@ struct GamesAndModsView: View {
                     )
 
             appState.coordinator.log(
-                "Sakura Mods: \(game.title) — объектов \(contentsItems.count)",
+                L10n.modsLogContents(game.title, contentsItems.count),
                 level: .info
             )
 
@@ -1069,7 +1067,7 @@ struct GamesAndModsView: View {
                 error.localizedDescription
 
             appState.coordinator.log(
-                "Ошибка Sakura Mods: \(error.localizedDescription)",
+                L10n.modsLogError(error.localizedDescription),
                 level: .error
             )
         }
@@ -1085,7 +1083,7 @@ struct GamesAndModsView: View {
 
         let panel = NSOpenPanel()
 
-        panel.title = "Выберите папку мода"
+        panel.title = L10n.modsChooseFolder
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -1121,7 +1119,7 @@ struct GamesAndModsView: View {
                     )
 
                     appState.coordinator.log(
-                        "🌸 Mod detected \(info.titleID)",
+                        L10n.modsLogDetected(info.titleID),
                         level: .info
                     )
 
@@ -1193,7 +1191,7 @@ struct GamesAndModsView: View {
             )
 
             modInstallMessage =
-                "🌸 Мод установлен"
+                L10n.modsInstalled
 
             if let currentGame = selectedGame {
                 await loadGames()
@@ -1216,7 +1214,7 @@ struct GamesAndModsView: View {
         } catch {
 
             modInstallMessage =
-                "Ошибка установки: \(error.localizedDescription)"
+                L10n.modsInstallError(error.localizedDescription)
         }
     }
 
@@ -1344,10 +1342,10 @@ struct GamesAndModsView: View {
             return "ExeFS"
 
         case "cheats":
-            return "Читы"
+            return L10n.modsFolderCheats
 
         case "flags":
-            return "Флаги"
+            return L10n.modsFolderFlags
 
         default:
             return nil
@@ -1413,7 +1411,7 @@ struct GamesAndModsView: View {
                 )
 
             Button(
-                "Повторить",
+                L10n.modsRetry,
                 action: retry
             )
         }

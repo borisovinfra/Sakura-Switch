@@ -12,20 +12,20 @@ struct InstallButtonView: View {
     var body: some View {
         switch state {
         case .idle:
-            Button("Установить", action: onInstall)
+            Button(L10n.install, action: onInstall)
                 .buttonStyle(.borderedProminent)
                 .disabled(isDisabled)
 
         case .connecting:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Подключение...")
+                Text(L10n.connecting)
             }
 
         case .connected:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Подключено, ожидание...")
+                Text(L10n.connectedWaiting)
             }
 
         case .transferring:
@@ -34,13 +34,13 @@ struct InstallButtonView: View {
         case .reconnecting(let attempt):
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Повторное подключение (\(attempt))...")
+                Text(L10n.reconnecting(attempt))
                     .foregroundStyle(.orange)
                 cancelButton
             }
 
         case .complete:
-            Label("Готово!", systemImage: "checkmark.circle.fill")
+            Label(L10n.done, systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
 
         case .error(let message):
@@ -76,7 +76,7 @@ struct InstallButtonView: View {
     }
 
     private var cancelButton: some View {
-        Button("Отмена", action: onCancel)
+        Button(L10n.cancel, action: onCancel)
             .buttonStyle(.plain)
             .foregroundStyle(.red)
     }

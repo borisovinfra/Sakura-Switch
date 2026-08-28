@@ -224,7 +224,7 @@ struct SDCardBrowserView: View {
 
                 Spacer()
 
-                Text("\(items.count) объектов")
+                Text(L10n.sdBrowserItemCount(items.count))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -1046,7 +1046,7 @@ struct SDCardBrowserView: View {
         }
 
         return currentPath == "/"
-            ? "Корень SD-карты"
+            ? L10n.sdBrowserRoot
             : currentPath
     }
 

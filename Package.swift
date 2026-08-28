@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SakuraSwitch",
+    defaultLocalization: "ru",
     platforms: [.macOS(.v15)],
     products: [
         .executable(name: "SakuraSwitch", targets: ["SakuraSwitch"])
@@ -74,7 +75,7 @@ let package = Package(
             name: "SakuraSwitch",
             dependencies: ["Installer"],
             resources: [
-                .copy("Resources")
+                .process("Resources")
             ]
         ),
 

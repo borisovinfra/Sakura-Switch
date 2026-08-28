@@ -21,9 +21,9 @@ struct ConnectionStatusView: View {
 
     private var statusText: String {
         if isConnected {
-            "Switch подключён (\(mode.rawValue))"
+            L10n.connectionConnected(L10n.transportModeTitle(mode.rawValue))
         } else {
-            "Ожидание подключения Switch..."
+            L10n.switchWaiting
         }
     }
 }

@@ -1267,7 +1267,7 @@ static int run_raw_upload_path(
             goto close_session;
         }
 
-        uint8_t buffer[1024 * 1024];
+        uint8_t buffer[64 * 1024];
         uint64_t sent_total = 0;
 
         while (!feof(fp)) {
@@ -1582,8 +1582,24 @@ static int run_raw_download_path(
         goto close_session;
     }
 
-    /* GetObject */
-    {
+    /*
+     * DBI Album quirk:
+     *
+     * GetPartialObject may resolve duplicated virtual Album handles
+     * to an object from another game. Small Album objects work
+     * correctly through the ordinary GetObject operation.
+     *
+     * Use GetObject up to 256 KiB and chunked GetPartialObject above it.
+     */
+    const char *ext = strrchr(remote_name, '.');
+    int is_jpeg =
+        ext &&
+        (
+            strcasecmp(ext, ".jpg") == 0 ||
+            strcasecmp(ext, ".jpeg") == 0
+        );
+
+    if (is_jpeg || object_size <= 256 * 1024) {
         uint32_t transaction = tx++;
 
         uint8_t cmd[16] = {0};
@@ -1596,6 +1612,8 @@ static int run_raw_download_path(
 
         *(uint32_t *)(cmd + 12) = object_handle;
 
+        transferred = 0;
+
         if (libusb_bulk_transfer(
             usb, 0x01,
             cmd, sizeof(cmd),
@@ -1605,43 +1623,62 @@ static int run_raw_download_path(
             goto close_session;
         }
 
-        uint8_t buffer[1024 * 1024];
+        uint8_t buffer[(64 * 1024) + 1024];
 
-        if (libusb_bulk_transfer(
+        transferred = 0;
+
+        int rc = libusb_bulk_transfer(
             usb, 0x81,
             buffer, sizeof(buffer),
             &transferred, 10000
-        ) != 0 || transferred < 12) {
-            printf("ERROR:GetObject data missing\n");
+        );
+
+        if (
+            (rc != 0 &&
+             !(rc == LIBUSB_ERROR_TIMEOUT && transferred > 0)) ||
+            transferred < 12
+        ) {
+            printf(
+                "ERROR:GetObject data failed: %s\n",
+                libusb_error_name(rc)
+            );
             goto close_session;
         }
 
         hdr_t *dh = (hdr_t *)buffer;
 
-        if (dh->type != 2 ||
+        if (
+            dh->type != 2 ||
             dh->code != 0x1009 ||
-            dh->transaction != transaction) {
+            dh->transaction != transaction ||
+            dh->length < 12
+        ) {
             printf("ERROR:Unexpected GetObject container\n");
             goto close_session;
         }
 
+        /*
+         * DBI may report a GetObject container length that does not
+         * match the actual object payload. ObjectInfo already gave us
+         * the authoritative file size, so use that for the data phase.
+         */
         uint64_t payload_total =
-            (uint64_t)dh->length - 12;
+            (uint64_t)object_size;
 
         uint64_t received = 0;
 
         int first_payload = transferred - 12;
 
         if (first_payload > 0) {
-            uint64_t useful =
+            size_t useful =
                 (uint64_t)first_payload > payload_total
-                ? payload_total
-                : (uint64_t)first_payload;
+                ? (size_t)payload_total
+                : (size_t)first_payload;
 
             if (fwrite(
                 buffer + 12,
                 1,
-                (size_t)useful,
+                useful,
                 fp
             ) != useful) {
                 printf("ERROR:Local file write failed\n");
@@ -1652,12 +1689,59 @@ static int run_raw_download_path(
         }
 
         while (received < payload_total) {
-            if (libusb_bulk_transfer(
+            transferred = 0;
+
+            rc = libusb_bulk_transfer(
                 usb, 0x81,
                 buffer, sizeof(buffer),
                 &transferred, 10000
-            ) != 0 || transferred <= 0) {
-                printf("ERROR:GetObject transfer failed\n");
+            );
+
+            if (
+                rc != 0 &&
+                !(rc == LIBUSB_ERROR_TIMEOUT && transferred > 0)
+            ) {
+                /*
+                 * DBI Album sometimes reports a larger ObjectSize than
+                 * the actual JPEG stream and terminates the USB transfer
+                 * after the JPEG EOI marker.
+                 */
+                if (is_jpeg) {
+                    fflush(fp);
+
+                    long current = ftell(fp);
+
+                    if (current >= 2) {
+                        if (fseek(fp, -2, SEEK_END) == 0) {
+                            unsigned char tail[2] = {0};
+
+                            if (
+                                fread(tail, 1, 2, fp) == 2 &&
+                                tail[0] == 0xFF &&
+                                tail[1] == 0xD9
+                            ) {
+                                printf(
+                                    "LOG:DBI Album JPEG completed early "
+                                    "(actual=%ld reported=%u)\n",
+                                    current,
+                                    object_size
+                                );
+
+                                goto jpeg_complete;
+                            }
+                        }
+                    }
+                }
+
+                printf(
+                    "ERROR:GetObject transfer failed: %s\n",
+                    libusb_error_name(rc)
+                );
+                goto close_session;
+            }
+
+            if (transferred <= 0) {
+                printf("ERROR:GetObject zero-length transfer\n");
                 goto close_session;
             }
 
@@ -1680,39 +1764,314 @@ static int run_raw_download_path(
             }
 
             received += useful;
-
-            printf(
-                "PROGRESS:%llu:%llu\n",
-                (unsigned long long)received,
-                (unsigned long long)payload_total
-            );
-            fflush(stdout);
         }
 
-        fflush(fp);
+jpeg_complete:
+
+        /*
+         * If DBI terminated after a complete JPEG, there may be no
+         * normal MTP response container left to consume.
+         */
+        if (is_jpeg) {
+            fflush(fp);
+
+            long current = ftell(fp);
+
+            if (current >= 2 && fseek(fp, -2, SEEK_END) == 0) {
+                unsigned char tail[2] = {0};
+
+                if (
+                    fread(tail, 1, 2, fp) == 2 &&
+                    tail[0] == 0xFF &&
+                    tail[1] == 0xD9
+                ) {
+                    fseek(fp, 0, SEEK_END);
+
+                    printf(
+                        "PROGRESS:%ld:%u\n",
+                        current,
+                        object_size
+                    );
+                    fflush(stdout);
+
+                    goto download_finished;
+                }
+            }
+
+            fseek(fp, 0, SEEK_END);
+        }
 
         uint8_t response[512] = {0};
 
-        if (libusb_bulk_transfer(
-            usb, 0x81,
-            response, sizeof(response),
-            &transferred, 10000
-        ) != 0 || transferred < 12) {
+        transferred = 0;
+
+        if (
+            libusb_bulk_transfer(
+                usb, 0x81,
+                response, sizeof(response),
+                &transferred, 10000
+            ) != 0 ||
+            transferred < 12
+        ) {
             printf("ERROR:GetObject response missing\n");
             goto close_session;
         }
 
         hdr_t *rh = (hdr_t *)response;
 
-        if (rh->type != 3 || rh->code != 0x2001) {
+        if (
+            rh->type != 3 ||
+            rh->code != 0x2001 ||
+            rh->transaction != transaction
+        ) {
             printf(
                 "ERROR:GetObject response 0x%04x\n",
                 rh->code
             );
             goto close_session;
         }
+
+        printf(
+            "PROGRESS:%llu:%u\n",
+            (unsigned long long)received,
+            object_size
+        );
+
+        fflush(stdout);
+
+    } else {
+
+    /*
+     * Download with MTP GetPartialObject (0x101B).
+     *
+     * DBI can terminate a long GetObject data phase on some Album
+     * objects. Reading the file in small independent MTP transactions
+     * avoids that boundary completely.
+     */
+    {
+        uint64_t offset = 0;
+        const uint32_t chunk_size = 64 * 1024;
+        uint8_t buffer[(64 * 1024) + 1024];
+
+        while (offset < object_size) {
+            uint32_t remaining_file =
+                object_size - (uint32_t)offset;
+
+            uint32_t requested =
+                remaining_file > chunk_size
+                ? chunk_size
+                : remaining_file;
+
+            uint32_t transaction = tx++;
+
+            uint8_t cmd[24] = {0};
+            hdr_t *h = (hdr_t *)cmd;
+
+            h->length = 24;
+            h->type = 1;
+            h->code = 0x101B; /* GetPartialObject */
+            h->transaction = transaction;
+
+            *(uint32_t *)(cmd + 12) = object_handle;
+            *(uint32_t *)(cmd + 16) = (uint32_t)offset;
+            *(uint32_t *)(cmd + 20) = requested;
+
+            transferred = 0;
+
+            if (libusb_bulk_transfer(
+                usb, 0x01,
+                cmd, sizeof(cmd),
+                &transferred, 3000
+            ) != 0) {
+                printf("ERROR:GetPartialObject command failed\n");
+                goto close_session;
+            }
+
+            transferred = 0;
+
+            int rc = libusb_bulk_transfer(
+                usb, 0x81,
+                buffer, sizeof(buffer),
+                &transferred, 10000
+            );
+
+            if (
+                (rc != 0 && !(rc == LIBUSB_ERROR_TIMEOUT && transferred > 0)) ||
+                transferred < 12
+            ) {
+                printf(
+                    "ERROR:GetPartialObject data failed: %s\n",
+                    libusb_error_name(rc)
+                );
+                goto close_session;
+            }
+
+            hdr_t *dh = (hdr_t *)buffer;
+
+            if (
+                dh->type != 2 ||
+                dh->code != 0x101B ||
+                dh->transaction != transaction ||
+                dh->length < 12
+            ) {
+                printf(
+                    "ERROR:Unexpected GetPartialObject container "
+                    "type=%u code=0x%04x length=%u\n",
+                    dh->type,
+                    dh->code,
+                    dh->length
+                );
+                goto close_session;
+            }
+
+            uint64_t payload_total =
+                (uint64_t)dh->length - 12;
+
+            if (payload_total == 0 || payload_total > requested) {
+                printf(
+                    "ERROR:GetPartialObject invalid payload %llu/%u\n",
+                    (unsigned long long)payload_total,
+                    requested
+                );
+                goto close_session;
+            }
+
+            uint64_t received = 0;
+
+            int first_payload = transferred - 12;
+
+            if (first_payload > 0) {
+                size_t useful =
+                    (uint64_t)first_payload > payload_total
+                    ? (size_t)payload_total
+                    : (size_t)first_payload;
+
+                if (
+                    fwrite(
+                        buffer + 12,
+                        1,
+                        useful,
+                        fp
+                    ) != useful
+                ) {
+                    printf("ERROR:Local file write failed\n");
+                    goto close_session;
+                }
+
+                received += useful;
+            }
+
+            int idle_timeouts = 0;
+
+            while (received < payload_total) {
+                transferred = 0;
+
+                rc = libusb_bulk_transfer(
+                    usb, 0x81,
+                    buffer, sizeof(buffer),
+                    &transferred, 10000
+                );
+
+                if (transferred > 0) {
+                    idle_timeouts = 0;
+
+                    uint64_t remaining =
+                        payload_total - received;
+
+                    size_t useful =
+                        (uint64_t)transferred > remaining
+                        ? (size_t)remaining
+                        : (size_t)transferred;
+
+                    if (
+                        fwrite(
+                            buffer,
+                            1,
+                            useful,
+                            fp
+                        ) != useful
+                    ) {
+                        printf("ERROR:Local file write failed\n");
+                        goto close_session;
+                    }
+
+                    received += useful;
+                }
+
+                if (rc == 0) {
+                    if (transferred <= 0) {
+                        printf(
+                            "ERROR:GetPartialObject zero-length transfer\n"
+                        );
+                        goto close_session;
+                    }
+
+                    continue;
+                }
+
+                if (rc == LIBUSB_ERROR_TIMEOUT) {
+                    if (transferred > 0)
+                        continue;
+
+                    idle_timeouts++;
+
+                    if (idle_timeouts <= 3)
+                        continue;
+                }
+
+                printf(
+                    "ERROR:GetPartialObject transfer failed: %s\n",
+                    libusb_error_name(rc)
+                );
+                goto close_session;
+            }
+
+            uint8_t response[512] = {0};
+
+            transferred = 0;
+
+            if (
+                libusb_bulk_transfer(
+                    usb, 0x81,
+                    response, sizeof(response),
+                    &transferred, 10000
+                ) != 0 ||
+                transferred < 12
+            ) {
+                printf("ERROR:GetPartialObject response missing\n");
+                goto close_session;
+            }
+
+            hdr_t *rh = (hdr_t *)response;
+
+            if (
+                rh->type != 3 ||
+                rh->code != 0x2001 ||
+                rh->transaction != transaction
+            ) {
+                printf(
+                    "ERROR:GetPartialObject response 0x%04x\n",
+                    rh->code
+                );
+                goto close_session;
+            }
+
+            offset += received;
+
+            printf(
+                "PROGRESS:%llu:%u\n",
+                (unsigned long long)offset,
+                object_size
+            );
+
+            fflush(stdout);
+        }
     }
 
+    }
+
+download_finished:
+    fflush(fp);
     fclose(fp);
     fp = NULL;
 

@@ -8,8 +8,8 @@ struct ContentView: View {
         case installation
         case sdCard
         case saves
-        case gallery
         case gamesAndMods
+        case applications
 
         case dbiBackend
         case ftp
@@ -20,14 +20,14 @@ struct ContentView: View {
 
         var title: String {
             switch self {
-            case .installation: return "Установка"
-            case .sdCard: return "SD-карта"
-            case .saves: return "Сохранения"
-            case .gallery: return "Галерея"
-            case .gamesAndMods: return "Игры и моды"
-            case .dbiBackend: return "DBI Backend"
-            case .ftp: return "FTP"
-            case .about: return "О программе"
+            case .installation: return L10n.navInstallation
+            case .sdCard: return L10n.navSDCard
+            case .saves: return L10n.navSaves
+            case .gamesAndMods: return L10n.navGamesAndMods
+            case .applications: return L10n.sidebarApplications
+            case .dbiBackend: return L10n.navDBIBackend
+            case .ftp: return L10n.navFTP
+            case .about: return L10n.navAbout
             }
         }
 
@@ -36,8 +36,8 @@ struct ContentView: View {
             case .installation: return "square.and.arrow.down"
             case .sdCard: return "externaldrive"
             case .saves: return "archivebox"
-            case .gallery: return "photo.on.rectangle"
             case .gamesAndMods: return "puzzlepiece.extension"
+            case .applications: return "square.grid.2x2"
             case .dbiBackend: return "cable.connector"
             case .ftp: return "network"
             case .about: return "info.circle"
@@ -107,8 +107,8 @@ struct ContentView: View {
                 .installation,
                 .sdCard,
                 .saves,
-                .gallery,
-                .gamesAndMods
+                .gamesAndMods,
+                .applications
             ])
 
             Spacer(minLength: 16)
@@ -151,6 +151,7 @@ struct ContentView: View {
                             .lineLimit(1)
 
                         Spacer(minLength: 4)
+
                     }
                     .font(.system(size: 13))
                     .padding(.horizontal, 9)
@@ -177,12 +178,10 @@ struct ContentView: View {
 
         case .saves:
             SavesView(appState: appState)
-
-        case .gallery:
-            GalleryView(appState: appState)
-
         case .gamesAndMods:
             GamesAndModsView(appState: appState)
+        case .applications:
+            ApplicationsView(appState: appState)
 
         case .about:
             AboutView()
@@ -489,12 +488,12 @@ struct ContentView: View {
     // MARK: - Transport Mode Picker
 
     private var transportModePicker: some View {
-        Picker("Режим", selection: Binding(
+        Picker(L10n.installMode, selection: Binding(
             get: { appState.coordinator.transportMode },
             set: { appState.setTransportMode($0) }
         )) {
             ForEach(InstallationCoordinator.TransportMode.allCases, id: \.self) { mode in
-                Text(mode.rawValue).tag(mode)
+                Text(L10n.transportModeTitle(mode.rawValue)).tag(mode)
             }
         }
         .pickerStyle(.segmented)
@@ -507,7 +506,7 @@ struct ContentView: View {
 
     private var sdCardTestSection: some View {
         HStack {
-            Button("Проверить SD-карту") {
+            Button(L10n.installCheckSD) {
                 appState.testSDCardBrowser()
             }
             .buttonStyle(.bordered)
@@ -523,7 +522,7 @@ struct ContentView: View {
     private var mtpTestSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Button("Проверить MTP-соединение") {
+                Button(L10n.installCheckMTP) {
                     appState.testMTPConnection()
                 }
                 .buttonStyle(.bordered)
@@ -532,7 +531,21 @@ struct ContentView: View {
                 if let result = appState.mtpTestResult {
                     Text(result)
                         .font(.caption2)
-                        .foregroundStyle((result.contains("SUCCESS") || result.contains("УСПЕХ")) ? .green : result.contains("Проверка") ? .secondary : .red)
+                        .foregroundStyle(
+                            (
+                                result.contains("SUCCESS") ||
+                                result.contains("УСПЕХ") ||
+                                result.contains("成功")
+                            )
+                                ? .green
+                                : (
+                                    result.contains("Проверка") ||
+                                    result.contains("Checking") ||
+                                    result.contains("確認")
+                                )
+                                    ? .secondary
+                                    : .red
+                        )
                 }
             }
         }
@@ -544,7 +557,7 @@ struct ContentView: View {
 
     private var mtpDestinationPicker: some View {
         HStack {
-            Text("Установить в:")
+            Text(L10n.installDestination)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -570,7 +583,7 @@ struct ContentView: View {
                 .foregroundStyle(.blue)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Быстрая настройка")
+                Text(L10n.installQuickSetup)
                     .font(.subheadline.weight(.semibold))
                 Text(appState.installHelpText)
                     .font(.caption)
@@ -580,7 +593,7 @@ struct ContentView: View {
 
             Spacer(minLength: 8)
 
-            Button("Закрыть") {
+            Button(L10n.close) {
                 appState.dismissInstallHelp()
             }
             .buttonStyle(.borderless)
@@ -596,12 +609,12 @@ struct ContentView: View {
                     .foregroundStyle(.blue)
                     .font(.title3)
 
-                Text("FTP-адрес Switch")
+                Text(L10n.ftpAddress)
                     .font(.subheadline.weight(.semibold))
             }
 
             HStack(spacing: 8) {
-                TextField("Введите IP Switch (например, 192.168.0.96:5000)", text: Binding(
+                TextField(L10n.ftpPlaceholder, text: Binding(
                     get: { appState.coordinator.ftpAddress },
                     set: { appState.coordinator.ftpAddress = $0 }
                 ))
@@ -611,7 +624,7 @@ struct ContentView: View {
                     appState.validateFTPAddress()
                 }
 
-                Button("Подключить") {
+                Button(L10n.connect) {
                     appState.validateFTPAddress()
                 }
                 .buttonStyle(.bordered)
@@ -623,7 +636,7 @@ struct ContentView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             } else if appState.isDeviceConnected && appState.coordinator.transportMode == .network {
-                Label("Готово к установке через FTP", systemImage: "checkmark.circle.fill")
+                Label(L10n.ftpReady, systemImage: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.green)
             }
@@ -637,7 +650,7 @@ struct ContentView: View {
     private var rightPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Журнал событий")
+                Text(L10n.eventLog)
                     .font(.headline)
 
                 Spacer()
@@ -649,7 +662,7 @@ struct ContentView: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
-                .help("Экспортировать журнал диагностики")
+                .help(L10n.exportLogHelp)
 
                 Button {
                     appState.copyLogsToClipboard()
@@ -658,7 +671,7 @@ struct ContentView: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
-                .help("Скопировать журнал в буфер обмена")
+                .help(L10n.copyLogHelp)
                 .disabled(appState.coordinator.logs.isEmpty)
             }
             .padding(.horizontal)
@@ -697,7 +710,7 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
 
             if !appState.coordinator.progress.files.isEmpty {
-                Button("Очистить очередь") {
+                Button(L10n.clearQueue) {
                     appState.coordinator.reset()
                 }
                 .buttonStyle(.plain)

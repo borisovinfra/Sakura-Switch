@@ -359,6 +359,62 @@ public final class InstallationCoordinator {
         }
     }
 
+    /// Downloads one Gallery file using the isolated Gallery helper.
+    public func downloadGalleryMTPFile(
+        storageId: UInt32,
+        directoryPath: String,
+        fileName: String,
+        destinationURL: URL
+    ) async throws {
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, any Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL =
+                    URL(fileURLWithPath: "/usr/bin/sudo")
+                process.arguments = [
+                    "-n",
+                    "/usr/local/libexec/sakuraswitch-mtp-helper-gallery",
+                    "--download-path",
+                    String(storageId),
+                    directoryPath,
+                    fileName,
+                    destinationURL.path
+                ]
+
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                process.standardError = pipe
+
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+
+                    let data =
+                        pipe.fileHandleForReading.readDataToEndOfFile()
+
+                    let output =
+                        String(data: data, encoding: .utf8) ?? ""
+
+                    guard process.terminationStatus == 0,
+                          output.components(separatedBy: .newlines)
+                              .contains("OK") else {
+                        throw MTPError.transferFailed(
+                            output.isEmpty
+                                ? "Не удалось скачать файл Gallery со Switch"
+                                : output
+                        )
+                    }
+
+                    continuation.resume()
+
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
     /// Materializes a Switch file or an entire directory tree locally.
     /// Used when dragging objects from Sakura Switch into Finder.
     public func materializeSDCardItem(

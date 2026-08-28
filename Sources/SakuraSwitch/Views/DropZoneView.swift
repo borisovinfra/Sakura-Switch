@@ -34,10 +34,10 @@ struct DropZoneView: View {
             Image(systemName: "arrow.down.doc")
                 .font(.system(size: 28))
                 .foregroundStyle(.secondary)
-            Text("Перетащите сюда файлы .nsp / .xci")
+            Text(L10n.dropFiles)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Button("или выбрать...") { openFilePicker() }
+            Button(L10n.chooseFiles) { openFilePicker() }
                 .buttonStyle(.plain)
                 .font(.caption)
                 .foregroundStyle(Color.accentColor)
@@ -52,7 +52,7 @@ struct DropZoneView: View {
         panel.allowedContentTypes = DropFileFilter.supportedExtensions.compactMap {
             UTType(filenameExtension: $0)
         }
-        panel.message = "Выберите файлы игр для установки"
+        panel.message = L10n.chooseFilesPanel
 
         if panel.runModal() == .OK {
             let urls = panel.urls.filter {
