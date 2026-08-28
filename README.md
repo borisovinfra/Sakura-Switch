@@ -51,6 +51,8 @@ Sakura Switch PRO включает встроенный каталог из **50
 - Безопасное обновление каталога с учётом GitHub API limits
 - Установка непосредственно на подключённый Nintendo Switch
 
+![Applications — Homebrew-каталог](Assets/screenshots/04-applications.png)
+
 ---
 
 ## ⚙️ Universal Homebrew Installer
@@ -150,6 +152,19 @@ Sakura автоматически определяет тип пакета и н
 
 ---
 
+## 🔌 DBI Backend
+
+Работа с DBI Backend непосредственно из Sakura Switch.
+
+- Запуск и остановка DBI Backend
+- Контроль состояния подключения
+- Просмотр адреса и порта
+- Журнал событий в реальном времени
+
+![DBI Backend](Assets/screenshots/06-dbi-backend.png)
+
+---
+
 ## 🌐 FTP
 
 Работа с Nintendo Switch по локальной сети.
@@ -158,6 +173,8 @@ Sakura автоматически определяет тип пакета и н
 - Передача файлов без USB
 - Сохранение адреса консоли
 - Работа через Wi-Fi
+
+![FTP](Assets/screenshots/07-ftp.png)
 
 ---
 
@@ -269,7 +286,7 @@ Sakura Switch PRO распространяется бесплатно.
 
 ## 🌸 Sakura Switch v1.1.0 PRO
 
-![Sakura Switch](Assets/screenshots/06-about.png)
+![Sakura Switch](Assets/screenshots/08-about.png)
 
 Актуальный стабильный релиз **Project Sakura**.
 
