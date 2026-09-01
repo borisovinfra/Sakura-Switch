@@ -1734,29 +1734,42 @@ enum HomebrewInstallService {
         under root: URL,
         remoteBase: String
     ) throws -> [PackageFile] {
-
         let fm = FileManager.default
 
         guard let enumerator = fm.enumerator(
-            at: root,
-            includingPropertiesForKeys: [
-                .isRegularFileKey,
-                .isSymbolicLinkKey
-            ],
-            options: [],
-            errorHandler: nil
+            atPath: root.path
         ) else {
             return []
         }
 
         var result: [PackageFile] = []
 
-        let prefix =
-            root.path.hasSuffix("/")
-            ? root.path
-            : root.path + "/"
+        for case let relativePath as String in enumerator {
+            let normalized =
+                relativePath.replacingOccurrences(
+                    of: "\\",
+                    with: "/"
+                )
 
-        for case let url as URL in enumerator {
+            let components = normalized.split(
+                separator: "/",
+                omittingEmptySubsequences: false
+            )
+
+            guard
+                !normalized.hasPrefix("/"),
+                !normalized.contains("\0"),
+                !components.contains(where: { $0 == ".." })
+            else {
+                throw InstallError.unsafeArchiveEntry(
+                    relativePath
+                )
+            }
+
+            let url =
+                root.appendingPathComponent(
+                    relativePath
+                )
 
             if isMetadataURL(url) {
                 continue
@@ -1771,7 +1784,7 @@ enum HomebrewInstallService {
 
             if values.isSymbolicLink == true {
                 throw InstallError.unsafeArchiveEntry(
-                    url.lastPathComponent
+                    relativePath
                 )
             }
 
@@ -1779,24 +1792,14 @@ enum HomebrewInstallService {
                 continue
             }
 
-            guard url.path.hasPrefix(prefix) else {
-                throw InstallError.unsafeArchiveEntry(
-                    url.path
-                )
-            }
-
-            let relative = String(
-                url.path.dropFirst(prefix.count)
-            )
-
-            guard !relative.isEmpty else {
+            guard !relativePath.isEmpty else {
                 continue
             }
 
             let remotePath =
                 remoteBase == "/"
-                ? "/" + relative
-                : remoteBase + "/" + relative
+                ? "/" + normalized
+                : remoteBase + "/" + normalized
 
             result.append(
                 PackageFile(
@@ -1814,7 +1817,6 @@ enum HomebrewInstallService {
 
         return result
     }
-
 
     private static func installPackageFiles(
         _ files: [PackageFile],
