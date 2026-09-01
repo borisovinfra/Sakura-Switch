@@ -17,7 +17,7 @@
 
 **macOS 15.0+**
 
-[**🌸 Скачать Sakura Switch v1.1.0 PRO**](https://github.com/borisovinfra/Sakura-Switch/releases/latest)
+[**🌸 Скачать Sakura Switch v1.1.1 PRO**](https://github.com/borisovinfra/Sakura-Switch/releases/latest)
 
 **PRO — это возможности приложения, а не ценник. Sakura Switch PRO бесплатна и останется бесплатной.**
 
