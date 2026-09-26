@@ -610,9 +610,9 @@ public final class InstallationCoordinator {
         NSLog("🌸 SD LOCAL ITEMS READY \(localItems.count)")
 
         let remoteItems =
-            (try? await browseSDCard(
+            try await browseSDCardForRecursiveUpload(
                 path: remotePath
-            )) ?? []
+            )
 
         NSLog("🌸 SD REMOTE ITEMS READY \(remoteItems.count)")
 
@@ -664,7 +664,7 @@ public final class InstallationCoordinator {
 
                     NSLog("🌸 SD CREATE FOLDER START \(name)")
 
-                    try await createSDCardFolder(
+                    try await ensureSDCardFolderForRecursiveUpload(
                         parentPath: remotePath,
                         folderName: name
                     )
@@ -700,6 +700,112 @@ public final class InstallationCoordinator {
                 destinationPath: remotePath
             )
         }
+    }
+
+
+
+    /// Reads an SD-card directory for recursive upload.
+    /// Transient DBI/MTP session failures are retried instead of
+    /// being misinterpreted as an empty directory.
+    private func browseSDCardForRecursiveUpload(
+        path: String
+    ) async throws -> [SDCardItem] {
+
+        var lastError: (any Error)?
+
+        for attempt in 1...3 {
+            do {
+                return try await browseSDCard(path: path)
+            } catch {
+                lastError = error
+
+                guard attempt < 3 else {
+                    break
+                }
+
+                NSLog(
+                    "🌸 SD BROWSE RETRY \(attempt) for \(path): \(error)"
+                )
+
+                try await Task.sleep(
+                    for: .milliseconds(150 * attempt)
+                )
+            }
+        }
+
+        throw lastError ??
+            MTPError.connectionFailed(
+                "Не удалось прочитать MTP-каталог"
+            )
+    }
+
+
+    /// Creates a directory during recursive upload with a small
+    /// bounded retry window for transient DBI/MTP session races.
+    public func ensureSDCardFolderForRecursiveUpload(
+        parentPath: String,
+        folderName: String
+    ) async throws {
+
+        var lastError: (any Error)?
+
+        for attempt in 1...3 {
+            do {
+                try await createSDCardFolder(
+                    parentPath: parentPath,
+                    folderName: folderName
+                )
+
+                // Give DBI a moment to release the just-closed MTP session
+                // before recursive browsing opens the next one.
+                try await Task.sleep(for: .milliseconds(100))
+                return
+
+            } catch {
+                lastError = error
+
+                // The mkdir may actually have succeeded before the
+                // transport/session failed. Verify before retrying.
+                if let refreshed =
+                    try? await browseSDCardForRecursiveUpload(
+                        path: parentPath
+                    ),
+                   let existing = refreshed.first(where: {
+                       $0.name.caseInsensitiveCompare(
+                           folderName
+                       ) == .orderedSame
+                   }) {
+
+                    guard existing.isDirectory else {
+                        throw MTPError.transferFailed(
+                            "Конфликт: \(parentPath)/\(folderName) уже существует как файл"
+                        )
+                    }
+
+                    NSLog(
+                        "🌸 SD CREATE FOLDER RECOVERED \(folderName)"
+                    )
+                    return
+                }
+
+                guard attempt < 3 else {
+                    break
+                }
+
+                NSLog(
+                    "🌸 SD CREATE FOLDER RETRY \(attempt) \(folderName): \(error)"
+                )
+
+                try await Task.sleep(
+                    for: .milliseconds(250 * attempt)
+                )
+            }
+        }
+
+        throw lastError ??
+            MTPError.transferFailed(
+                "Не удалось создать папку"
+            )
     }
 
 

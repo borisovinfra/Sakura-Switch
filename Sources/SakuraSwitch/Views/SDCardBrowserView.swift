@@ -852,7 +852,7 @@ struct SDCardBrowserView: View {
 
                     } else {
 
-                        try await coordinator.createSDCardFolder(
+                        try await coordinator.ensureSDCardFolderForRecursiveUpload(
                             parentPath: currentPath,
                             folderName: url.lastPathComponent
                         )
