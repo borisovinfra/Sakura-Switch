@@ -64,6 +64,7 @@ struct StorageCenterDashboard: View {
     @State private var selectedDestination: String?
     @State private var capacityScan: CapacityScan?
     @State private var capacityBusy = false
+    @State private var diskRevision = 0
     @State private var events: [LogEvent] = []
     @State private var busy = false
     @State private var scanned = false
@@ -93,6 +94,14 @@ struct StorageCenterDashboard: View {
         }
         .task {
             if !scanned { await refreshDisks() }
+        }
+        .onChange(of: selectedSource) { _, _ in
+            diskRevision += 1
+            capacityScan = nil
+        }
+        .onChange(of: selectedDestination) { _, _ in
+            diskRevision += 1
+            capacityScan = nil
         }
     }
 
@@ -393,7 +402,10 @@ struct StorageCenterDashboard: View {
                                     .foregroundStyle(.orange)
                                     .fontWeight(.semibold)
                                 ForEach(readiness.messages, id: \.self) { message in
-                                    Text(message)
+                                    Text(message.contains("не хватает минимум") &&
+     message.contains("байт без учёта резерва")
+     ? "Недостаточно свободного места для переноса файлов."
+     : message)
                                 }
                                 if let bytes = result.bytes, let free = result.free, bytes > free {
                                     Text("Не хватает минимум \(sizeText(bytes - free)) без учёта резерва и FAT32.")
@@ -577,6 +589,7 @@ struct StorageCenterDashboard: View {
               disks.contains(where: { $0.id == targetID }) else { return }
         capacityBusy = true
         capacityScan = nil
+        let revision = diskRevision
         let result = await Task.detached(priority: .userInitiated) { () -> CapacityScan in
             func plist(_ id: String) throws -> [String: Any] {
                 let p = Process()
@@ -720,8 +733,11 @@ struct StorageCenterDashboard: View {
                     readiness: nil)
             }
         }.value
-        capacityScan = result
         capacityBusy = false
+        guard revision == diskRevision,
+              selectedSource == result.sourceID,
+              selectedDestination == result.destinationID else { return }
+        capacityScan = result
         events.insert(LogEvent(message: "Проверка вместимости: \(result.warning ?? "оценка файлов завершена")", isWarning: result.warning != nil), at: 0)
     }
 
@@ -729,6 +745,8 @@ struct StorageCenterDashboard: View {
     private func refreshDisks() async {
         guard !busy else { return }
         busy = true
+        diskRevision += 1
+        capacityScan = nil
         error = nil
         let result = await Task.detached(priority: .userInitiated) { () -> Scan in
             do {
