@@ -2,7 +2,11 @@ import Foundation
 
 enum L10n {
     private static func text(_ key: String) -> String {
-        String(localized: String.LocalizationValue(key), bundle: .main)
+        String(
+            localized: String.LocalizationValue(key),
+            bundle: Bundle.module.path(forResource: "ru", ofType: "lproj")
+                .map { Bundle(path: $0)! } ?? .module
+        )
     }
 
     // MARK: - Compatibility
