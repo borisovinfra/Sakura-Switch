@@ -74,7 +74,7 @@ public enum SakuraEmuMMCDetector {
             if lower.hasPrefix("0x") {
                 sector = UInt64(lower.dropFirst(2), radix: 16)
             } else {
-                sector = UInt64(lower)
+                sector = UInt64(lower, radix: 16)
             }
             if sector == nil { warnings.append("Некорректное значение sector") }
         }
