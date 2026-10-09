@@ -36,6 +36,16 @@ struct StorageCenterDashboard: View {
         let disks: [DiskCard]
         let error: String?
     }
+    private struct CapacityScan: Sendable {
+        let sourceID: String
+        let destinationID: String
+        let bytes: UInt64?
+        let free: UInt64?
+        let files: Int
+        let excluded: Int
+        let warning: String?
+    }
+
     private struct LogEvent: Identifiable {
         let id = UUID()
         let time = Date()
@@ -47,6 +57,8 @@ struct StorageCenterDashboard: View {
     @State private var disks: [DiskCard] = []
     @State private var selectedSource: String?
     @State private var selectedDestination: String?
+    @State private var capacityScan: CapacityScan?
+    @State private var capacityBusy = false
     @State private var events: [LogEvent] = []
     @State private var busy = false
     @State private var scanned = false
@@ -264,6 +276,12 @@ struct StorageCenterDashboard: View {
                         }
                         Button("Обновить накопители") { Task { await refreshDisks() } }
                             .disabled(busy)
+                        Button("Проверить объём файлов · только чтение") {
+                            Task { await inspectTransferCapacity() }
+                        }
+                        .disabled(busy || capacityBusy || selectedSource == nil ||
+                                  selectedDestination == nil || selectedSource == selectedDestination)
+                        if capacityBusy { ProgressView("Читаем инвентаризацию файлов…") }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 5)
@@ -288,6 +306,42 @@ struct StorageCenterDashboard: View {
                     Label("Выберите другой физический диск в качестве назначения.",
                           systemImage: "info.circle")
                         .foregroundStyle(.secondary)
+                }
+
+                if let result = capacityScan,
+                   result.sourceID == selectedSource,
+                   result.destinationID == selectedDestination {
+                    GroupBox("Предварительная оценка вместимости") {
+                        VStack(alignment: .leading, spacing: 7) {
+                            if let bytes = result.bytes, let free = result.free {
+                                Text("Файлов для переноса: \(result.files)")
+                                Text("Логический объём файлов: \(sizeText(bytes))")
+                                Text("Свободно на выбранном томе: \(sizeText(free))")
+                                if bytes > free {
+                                    Label("Недостаточно места · не хватает \(sizeText(bytes - free))",
+                                          systemImage: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                } else {
+                                    Label("Логический объём помещается без учёта резерва и накладных расходов файловой системы. Перенос не разрешён.",
+                                          systemImage: "info.circle")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            if result.excluded > 0 {
+                                Text("Исключено служебных путей macOS: \(result.excluded). Требуется отдельная проверка.")
+                                    .foregroundStyle(.orange)
+                            }
+                            if let warning = result.warning {
+                                Label(warning, systemImage: "exclamationmark.triangle")
+                                    .foregroundStyle(.orange)
+                            }
+                            Text("Только файловая оценка; RAW emuMMC, FAT32-кластеры, резерв и конфликты не подтверждены.")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 5)
+                    }
                 }
 
                 GroupBox("Безопасность") {
@@ -435,6 +489,79 @@ struct StorageCenterDashboard: View {
         ByteCountFormatter.string(fromByteCount: Int64(clamping: size), countStyle: .file)
     }
 
+    /// Freshly verifies selected physical disks and their single mounted volumes.
+    /// No write operations; inspection only, never authorizes migration.
+    @MainActor
+    private func inspectTransferCapacity() async {
+        guard !capacityBusy, !busy,
+              let sourceID = selectedSource, let targetID = selectedDestination,
+              sourceID != targetID,
+              disks.contains(where: { $0.id == sourceID }),
+              disks.contains(where: { $0.id == targetID }) else { return }
+        capacityBusy = true
+        capacityScan = nil
+        let result = await Task.detached(priority: .userInitiated) { () -> CapacityScan in
+            func plist(_ id: String) throws -> [String: Any] {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
+                p.arguments = ["info", "-plist", id]
+                let pipe = Pipe()
+                p.standardOutput = pipe
+                p.standardError = FileHandle.nullDevice
+                try p.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                guard p.terminationStatus == 0,
+                      let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+                    throw NSError(domain: "SakuraCapacity", code: 1)
+                }
+                return info
+            }
+            func mountedVolume(_ id: String) throws -> (URL, UInt64) {
+                let disk = try plist(id)
+                guard disk["DeviceIdentifier"] as? String == id,
+                      StorageDiskSafety.assess(disk) == .externalPhysicalCandidate else {
+                    throw NSError(domain: "SakuraCapacity", code: 2)
+                }
+                let parts = try StoragePartitionInspector.partitions(for: id)
+                var matches: [(URL, UInt64)] = []
+                for part in parts where part.id.range(of: "^" + id + "s[0-9]+$", options: .regularExpression) != nil {
+                    let p = try plist(part.id)
+                    guard p["DeviceIdentifier"] as? String == part.id,
+                          p["ParentWholeDisk"] as? String == id,
+                          let mount = p["MountPoint"] as? String,
+                          mount.hasPrefix("/Volumes/"),
+                          let free = p["FreeSpace"] as? NSNumber else { continue }
+                    let url = URL(fileURLWithPath: mount, isDirectory: true)
+                    guard url.path == mount,
+                          FileManager.default.fileExists(atPath: mount) else { continue }
+                    matches.append((url, free.uint64Value))
+                }
+                guard matches.count == 1 else {
+                    throw NSError(domain: "SakuraCapacity", code: 3)
+                }
+                return matches[0]
+            }
+            do {
+                let (sourceURL, _) = try mountedVolume(sourceID)
+                let (_, free) = try mountedVolume(targetID)
+                let report = SakuraMigrationInventory.inspect(root: sourceURL,
+                    policy: .excludeKnownMacOSMetadata)
+                return CapacityScan(sourceID: sourceID, destinationID: targetID,
+                    bytes: report.complete ? report.totalLogicalBytes : nil,
+                    free: free, files: Int(report.fileCount), excluded: report.skippedPaths.count,
+                    warning: report.complete ? nil : "Инвентаризация неполная: перенос заблокирован")
+            } catch {
+                return CapacityScan(sourceID: sourceID, destinationID: targetID,
+                    bytes: nil, free: nil, files: 0, excluded: 0,
+                    warning: "Не удалось независимо подтвердить диски и тома: \(error.localizedDescription)")
+            }
+        }.value
+        capacityScan = result
+        capacityBusy = false
+        events.insert(LogEvent(message: "Проверка вместимости: \(result.warning ?? "оценка файлов завершена")", isWarning: result.warning != nil), at: 0)
+    }
+
     @MainActor
     private func refreshDisks() async {
         guard !busy else { return }
@@ -503,6 +630,7 @@ struct StorageCenterDashboard: View {
             }
         }.value
         disks = result.disks
+        capacityScan = nil
         error = result.error
         scanned = true
         busy = false
