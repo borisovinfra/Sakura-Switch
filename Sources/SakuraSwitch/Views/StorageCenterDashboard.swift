@@ -46,6 +46,7 @@ struct StorageCenterDashboard: View {
     @State private var page: Page = .overview
     @State private var disks: [DiskCard] = []
     @State private var selectedSource: String?
+    @State private var selectedDestination: String?
     @State private var events: [LogEvent] = []
     @State private var busy = false
     @State private var scanned = false
@@ -61,7 +62,7 @@ struct StorageCenterDashboard: View {
                     switch page {
                     case .overview: overview
                     case .analysis: StorageCenterView()
-                    case .migration: unavailable("Перенос карты", "Перенос данных пока отключён. Проверка второй microSD и контроль целостности ещё не завершены.")
+                    case .migration: transferPreview
                     case .backup: unavailable("Резервирование", "Создание образа и запись резервных копий пока недоступны.")
                     case .restore: unavailable("Восстановление", "Запись образов на накопители пока недоступна.")
                     }
@@ -146,7 +147,7 @@ struct StorageCenterDashboard: View {
                     quickAction("Анализ карты", description: "Разделы, emuMMC и файлы", icon: "magnifyingglass", tint: .blue, enabled: true) {
                         page = .analysis
                     }
-                    quickAction("Перенос карты", description: "Пока недоступен", icon: "arrow.left.arrow.right", tint: .pink, enabled: false) {}
+                    quickAction("Перенос карты", description: "Предпросмотр без записи", icon: "arrow.left.arrow.right", tint: .pink, enabled: true) { page = .migration }
                     quickAction("Резервирование", description: "Пока недоступно", icon: "externaldrive", tint: .green, enabled: false) {}
                     quickAction("Восстановление", description: "Пока недоступно", icon: "arrow.counterclockwise", tint: .purple, enabled: false) {}
                 }
@@ -232,6 +233,101 @@ struct StorageCenterDashboard: View {
         .background(Color.secondary.opacity(0.075))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.17)))
+    }
+
+    // Selection-only preview. NEVER invokes write/format/transfer APIs.
+    private var transferPreview: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Предпросмотр переноса", systemImage: "arrow.left.arrow.right")
+                    .font(.title3.weight(.semibold))
+                Label("Только чтение. Копирование, форматирование и запись на диск отключены.",
+                      systemImage: "lock.shield")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                GroupBox("Выбор физических накопителей") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Picker("Источник", selection: $selectedSource) {
+                            Text("Не выбран").tag(Optional<String>.none)
+                            ForEach(disks) { disk in
+                                Text("\(disk.volumeName ?? disk.id) (\(disk.id))")
+                                    .tag(Optional(disk.id))
+                            }
+                        }
+                        Picker("Назначение", selection: $selectedDestination) {
+                            Text("Не выбрано").tag(Optional<String>.none)
+                            ForEach(disks.filter { $0.id != selectedSource }) { disk in
+                                Text("\(disk.volumeName ?? disk.id) (\(disk.id))")
+                                    .tag(Optional(disk.id))
+                            }
+                        }
+                        Button("Обновить накопители") { Task { await refreshDisks() } }
+                            .disabled(busy)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
+                }
+
+                if let source = disks.first(where: { $0.id == selectedSource }) {
+                    transferDiskSummary("Источник · только чтение", disk: source)
+                } else {
+                    Label("Выберите исходный физический диск.", systemImage: "info.circle")
+                        .foregroundStyle(.secondary)
+                }
+
+                if let destination = disks.first(where: { $0.id == selectedDestination }),
+                   destination.id != selectedSource {
+                    transferDiskSummary("Назначение · только просмотр", disk: destination)
+                    if destination.filesystem != "MS-DOS FAT32" {
+                        Label("Файловая система назначения не подтверждена как FAT32.",
+                              systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                } else {
+                    Label("Выберите другой физический диск в качестве назначения.",
+                          systemImage: "info.circle")
+                        .foregroundStyle(.secondary)
+                }
+
+                GroupBox("Безопасность") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Источник и назначение должны быть разными физическими дисками.",
+                              systemImage: "checkmark.shield")
+                        Label("Сведения о томе предварительные: это первый распознанный смонтированный раздел.",
+                              systemImage: "info.circle")
+                        Label("Для переноса нужны отдельные проверки структуры, конфликтов, места и повторная идентификация дисков.",
+                              systemImage: "exclamationmark.triangle")
+                        Text("Запуск переноса пока недоступен независимо от выбранных дисков.")
+                            .fontWeight(.semibold)
+                    }
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+        }
+    }
+
+    private func transferDiskSummary(_ heading: String, disk: DiskCard) -> some View {
+        GroupBox(heading) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("\(disk.volumeName ?? "Без имени") · \(disk.id)")
+                    .font(.subheadline.weight(.medium))
+                Text("Физическая ёмкость: \(sizeText(disk.size))")
+                Text("Файловая система: \(disk.filesystem ?? "не установлена")")
+                if let total = disk.volumeTotalBytes, let free = disk.volumeFreeBytes {
+                    Text("Том: \(sizeText(total)) · свободно \(sizeText(free))")
+                } else {
+                    Text("Свободное место не подтверждено")
+                }
+            }
+            .font(.caption)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 5)
+        }
     }
 
     private var destinationPlaceholder: some View {
@@ -412,6 +508,9 @@ struct StorageCenterDashboard: View {
         busy = false
         if let selectedSource, !disks.contains(where: { $0.id == selectedSource }) {
             self.selectedSource = nil
+        }
+        if let selectedDestination, !disks.contains(where: { $0.id == selectedDestination }) {
+            self.selectedDestination = nil
         }
         let text = result.error.map { "Ошибка поиска накопителей: \($0)" }
             ?? "Проверено внешних физических накопителей: \(result.disks.count)"
