@@ -607,14 +607,14 @@ struct StorageCenterDashboard: View {
                 }
                 return info
             }
-            func mountedVolume(_ id: String) throws -> (URL, UInt64) {
+            func mountedVolume(_ id: String) throws -> (URL, UInt64, SakuraDiskIdentityGuard.Snapshot) {
                 let disk = try plist(id)
                 guard disk["DeviceIdentifier"] as? String == id,
                       StorageDiskSafety.assess(disk) == .externalPhysicalCandidate else {
                     throw NSError(domain: "SakuraCapacity", code: 2)
                 }
                 let parts = try StoragePartitionInspector.partitions(for: id)
-                var matches: [(URL, UInt64)] = []
+                var matches: [(URL, UInt64, SakuraDiskIdentityGuard.Snapshot)] = []
                 for part in parts where part.id.range(of: "^" + id + "s[0-9]+$", options: .regularExpression) != nil {
                     let p = try plist(part.id)
                     guard p["DeviceIdentifier"] as? String == part.id,
@@ -625,7 +625,9 @@ struct StorageCenterDashboard: View {
                     let url = URL(fileURLWithPath: mount, isDirectory: true)
                     guard url.path == mount,
                           FileManager.default.fileExists(atPath: mount) else { continue }
-                    matches.append((url, free.uint64Value))
+                    // No identity metadata means the scan must fail closed.
+                    let identity = try SakuraDiskIdentityGuard.capture(disk: disk, partition: p)
+                    matches.append((url, free.uint64Value, identity))
                 }
                 guard matches.count == 1 else {
                     throw NSError(domain: "SakuraCapacity", code: 3)
@@ -633,8 +635,8 @@ struct StorageCenterDashboard: View {
                 return matches[0]
             }
             do {
-                let (sourceURL, _) = try mountedVolume(sourceID)
-                let (targetURL, free) = try mountedVolume(targetID)
+                let (sourceURL, _, sourceBefore) = try mountedVolume(sourceID)
+                let (targetURL, free, targetBefore) = try mountedVolume(targetID)
                 let report = SakuraMigrationInventory.inspect(root: sourceURL,
                     policy: .excludeKnownMacOSMetadata)
 
@@ -717,6 +719,17 @@ struct StorageCenterDashboard: View {
                         sourceManifest.skippedPaths.isEmpty && targetManifest.skippedPaths.isEmpty,
                     inventoryComplete: report.complete && sourceManifest.complete && targetManifest.complete))
 
+                // Detect a changed/replaced or remounted disk during this scan.
+                // Equal metadata is not proof of physical identity and never permits writing.
+                let (sourceAgain, _, sourceAfter) = try mountedVolume(sourceID)
+                let (targetAgain, _, targetAfter) = try mountedVolume(targetID)
+                guard sourceAgain.path == sourceURL.path,
+                      targetAgain.path == targetURL.path,
+                      SakuraDiskIdentityGuard.assess(previous: sourceBefore, current: sourceAfter) == .metadataConsistentIdentityUnproven,
+                      SakuraDiskIdentityGuard.assess(previous: targetBefore, current: targetAfter) == .metadataConsistentIdentityUnproven else {
+                    throw NSError(domain: "SakuraIdentity", code: 4,
+                                  userInfo: [NSLocalizedDescriptionKey: "Метаданные накопителя изменились во время анализа. Повторите диагностику."])
+                }
                 return CapacityScan(sourceID: sourceID, destinationID: targetID,
                     bytes: report.complete ? report.totalLogicalBytes : nil,
                     free: free, files: Int(report.fileCount), excluded: report.skippedPaths.count,
