@@ -181,7 +181,7 @@ struct ContentView: View {
             workingInterface
 
         case .storageCenter:
-            StorageCenterView()
+            StorageCenterDashboard()
         case .saves:
             SavesView(appState: appState)
         case .gamesAndMods:
