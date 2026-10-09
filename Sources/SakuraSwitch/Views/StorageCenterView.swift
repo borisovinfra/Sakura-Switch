@@ -13,6 +13,8 @@ struct StorageCenterView: View {
     @State private var partitionLoading = false
     @State private var partitionError: String?
     @State private var partitionRequestID = UUID()
+    @State private var emummcReport: EmuMMCScanResult?
+    @State private var emummcLoading = false
 
     var body: some View {
         ScrollView {
@@ -65,6 +67,8 @@ struct StorageCenterView: View {
                                     partitionRequestID = UUID()
                                     partitions = []
                                     partitionError = nil
+                                    emummcReport = nil
+                                    emummcLoading = true
                                     partitionLoading = true
                                     let requestID = partitionRequestID
                                     Task { await loadPartitions(for: disk, requestID: requestID) }
@@ -147,14 +151,27 @@ struct StorageCenterView: View {
 
                 GroupBox("Диагностика emuMMC") {
                     VStack(alignment: .leading, spacing: 8) {
-                        if let selectedDiskID, disks.contains(where: { $0.id == selectedDiskID }) {
-                            Label("Выбран \(selectedDiskID). Проверка разделов и emuMMC будет подключена следующим этапом.",
-                                  systemImage: "externaldrive.badge.questionmark")
+                        if selectedDiskID == nil {
+                            Label("Выберите внешний накопитель.", systemImage: "waveform.path.ecg")
+                        } else if emummcLoading {
+                            ProgressView("Проверяем конфигурацию Hekate…")
+                        } else if let report = emummcReport {
+                            Label(report.title, systemImage: report.found ? "checkmark.shield" : "info.circle")
+                            if let mode = report.mode {
+                                Text("Режим: \(mode)")
+                            }
+                            if let status = report.status {
+                                Text("Статус: \(status)")
+                                    .fontWeight(.semibold)
+                            }
+                            ForEach(report.messages, id: \.self) { message in
+                                Text("• \(message)")
+                                    .font(.caption)
+                            }
                         } else {
-                            Label("Выберите внешний накопитель для дальнейшей диагностики.",
-                                  systemImage: "waveform.path.ecg")
+                            Text("Проверка пока не выполнялась.")
                         }
-                        Text("Никакая проверка целостности NAND сейчас не выполняется.")
+                        Text("Структура файлов не подтверждает целостность NAND или готовность к переносу.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -183,6 +200,12 @@ struct StorageCenterView: View {
         partitionLoading = false
         partitions = result.partitions
         partitionError = result.error
+        let report = await Task.detached(priority: .userInitiated) {
+            SafeExternalDiskScanner.inspectEmuMMC(on: disk)
+        }.value
+        guard partitionRequestID == requestID, selectedDiskID == disk.id else { return }
+        emummcLoading = false
+        emummcReport = report
     }
 
     @MainActor
@@ -194,6 +217,8 @@ struct StorageCenterView: View {
         partitions = []
         partitionError = nil
         partitionLoading = false
+        emummcLoading = false
+        emummcReport = nil
         loading = true
         scanError = nil
         let result = await Task.detached(priority: .userInitiated) {
@@ -232,6 +257,14 @@ private struct StoragePartitionRow: Identifiable, Sendable {
 private struct PartitionScanResult: Sendable {
     let partitions: [StoragePartitionRow]
     let error: String?
+}
+
+private struct EmuMMCScanResult: Sendable {
+    let found: Bool
+    let title: String
+    let mode: String?
+    let status: String?
+    let messages: [String]
 }
 
 private enum SafeExternalDiskScanner {
@@ -295,6 +328,56 @@ private enum SafeExternalDiskScanner {
             return PartitionScanResult(partitions: result, error: nil)
         } catch {
             return PartitionScanResult(partitions: [], error: "Не удалось получить разделы: \(error.localizedDescription)")
+        }
+    }
+
+    static func inspectEmuMMC(on disk: SafeExternalDisk) -> EmuMMCScanResult {
+        func info(_ text: String) -> EmuMMCScanResult {
+            EmuMMCScanResult(found: false, title: text, mode: nil, status: nil, messages: [])
+        }
+        do {
+            // Verify the whole disk again; disk identifiers can be reused after unplugging.
+            let diskInfo = try readDiskInfo(id: disk.id)
+            guard StorageDiskSafety.assess(diskInfo) == .externalPhysicalCandidate,
+                  diskInfo["DeviceIdentifier"] as? String == disk.id,
+                  let diskSize = diskInfo["Size"] as? NSNumber,
+                  diskSize.uint64Value == disk.size else {
+                return info("Накопитель изменился; обновите список")
+            }
+            let partitions = try StoragePartitionInspector.partitions(for: disk.id)
+            var found: [(URL, SakuraEmuMMCDetector.Result)] = []
+            for part in partitions {
+                guard part.id.range(of: "^" + disk.id + "s[0-9]+$", options: .regularExpression) != nil else {
+                    return info("Неподтверждённый идентификатор раздела")
+                }
+                let details = try readDiskInfo(id: part.id)
+                guard details["DeviceIdentifier"] as? String == part.id,
+                      details["ParentWholeDisk"] as? String == disk.id,
+                      let mount = details["MountPoint"] as? String,
+                      mount.hasPrefix("/Volumes/"),
+                      mount != "/Volumes/" else { continue }
+                let root = URL(fileURLWithPath: mount, isDirectory: true).standardizedFileURL
+                let ini = root.appendingPathComponent("emuMMC/emummc.ini")
+                guard FileManager.default.fileExists(atPath: ini.path) else { continue }
+                // Re-check the partition-to-disk relationship immediately before reading.
+                let second = try readDiskInfo(id: part.id)
+                guard second["ParentWholeDisk"] as? String == disk.id,
+                      second["MountPoint"] as? String == mount else {
+                    return info("Раздел изменился во время проверки; обновите список")
+                }
+                let config = try SakuraEmuMMCDetector.inspect(fileAt: ini)
+                found.append((root, config))
+            }
+            if found.isEmpty { return info("Конфигурация emuMMC на выбранном диске не обнаружена") }
+            if found.count > 1 { return info("Найдено несколько конфигураций emuMMC; требуется ручная проверка") }
+            let (root, config) = found[0]
+            // RAW geometry/GPP size is not inferred. The diagnostic reports missing inputs.
+            let report = SakuraStorageDiagnostic.inspect(configuration: config, sdRoot: root)
+            return EmuMMCScanResult(found: true, title: "Конфигурация Hekate обнаружена",
+                                   mode: config.mode.rawValue, status: report.status.rawValue,
+                                   messages: report.messages)
+        } catch {
+            return info("Диагностика недоступна: \(error.localizedDescription)")
         }
     }
 
