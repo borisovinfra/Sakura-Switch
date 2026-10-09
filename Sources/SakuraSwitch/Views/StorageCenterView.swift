@@ -15,6 +15,8 @@ struct StorageCenterView: View {
     @State private var partitionRequestID = UUID()
     @State private var emummcReport: EmuMMCScanResult?
     @State private var emummcLoading = false
+    @State private var inventoryLoading = false
+    @State private var inventoryReport: StorageInventoryScanResult?
 
     var body: some View {
         ScrollView {
@@ -69,6 +71,8 @@ struct StorageCenterView: View {
                                     partitionError = nil
                                     emummcReport = nil
                                     emummcLoading = true
+                                    inventoryLoading = true
+                                    inventoryReport = nil
                                     partitionLoading = true
                                     let requestID = partitionRequestID
                                     Task { await loadPartitions(for: disk, requestID: requestID) }
@@ -179,6 +183,55 @@ struct StorageCenterView: View {
                     .padding(.vertical, 5)
                 }
 
+                GroupBox("Инвентаризация microSD") {
+                    VStack(alignment: .leading, spacing: 9) {
+                        if selectedDiskID == nil {
+                            Text("Выберите внешний накопитель.").foregroundStyle(.secondary)
+                        } else if inventoryLoading {
+                            ProgressView("Составляем манифест файлов…")
+                        } else if let report = inventoryReport {
+                            Label(report.summary,
+                                  systemImage: report.complete ? "checkmark.circle" : "exclamationmark.triangle")
+                                .foregroundStyle(report.complete ? .green : .orange)
+                            if let fileCount = report.fileCount,
+                               let directoryCount = report.directoryCount,
+                               let bytes = report.totalBytes {
+                                Text("Файлы: \(fileCount) · Каталоги: \(directoryCount)")
+                                Text("Размер файлов: \(ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .binary))")
+                            }
+                            Text("Исключено служебных путей macOS: \(report.skippedPaths.count)")
+                            ForEach(report.skippedPaths, id: \.self) { path in
+                                Text("Исключено: \(path)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            ForEach(report.errors, id: \.self) { message in
+                                Text("Ошибка: \(message)")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        } else {
+                            Text("Инвентаризация ещё не проводилась.")
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("Проверены метаданные, но не содержимое NAND. Исключения требуют отдельного подтверждения перед миграцией.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
+                }
+
+                GroupBox("Подготовка переноса") {
+                    Label("Перенос отключён. Нужна отдельная целевая microSD, проверка конфликтов, контроль целостности и повторная проверка накопителей.",
+                          systemImage: "lock.shield")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 5)
+                }
+
                 Text("Обнаруженная структура не подтверждает целостность NAND или готовность к переносу.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -206,6 +259,12 @@ struct StorageCenterView: View {
         guard partitionRequestID == requestID, selectedDiskID == disk.id else { return }
         emummcLoading = false
         emummcReport = report
+        let inventory = await Task.detached(priority: .userInitiated) {
+            SafeExternalDiskScanner.inspectInventory(on: disk)
+        }.value
+        guard partitionRequestID == requestID, selectedDiskID == disk.id else { return }
+        inventoryReport = inventory
+        inventoryLoading = false
     }
 
     @MainActor
@@ -219,6 +278,8 @@ struct StorageCenterView: View {
         partitionLoading = false
         emummcLoading = false
         emummcReport = nil
+        inventoryReport = nil
+        inventoryLoading = false
         loading = true
         scanError = nil
         let result = await Task.detached(priority: .userInitiated) {
@@ -265,6 +326,16 @@ private struct EmuMMCScanResult: Sendable {
     let mode: String?
     let status: String?
     let messages: [String]
+}
+
+private struct StorageInventoryScanResult: Sendable {
+    let complete: Bool
+    let summary: String
+    let fileCount: Int?
+    let directoryCount: Int?
+    let totalBytes: UInt64?
+    let skippedPaths: [String]
+    let errors: [String]
 }
 
 private enum SafeExternalDiskScanner {
@@ -434,6 +505,70 @@ private enum SafeExternalDiskScanner {
                                     messages: messages)
         } catch {
             return info("Диагностика недоступна: \(error.localizedDescription)")
+        }
+    }
+
+    // Read-only scan. The chosen whole disk and partition identity are checked again.
+    // Never assumes a mounted partition belongs to a disk based on its name alone.
+    static func inspectInventory(on disk: SafeExternalDisk) -> StorageInventoryScanResult {
+        func failed(_ message: String) -> StorageInventoryScanResult {
+            StorageInventoryScanResult(complete: false, summary: "Инвентаризация не завершена",
+                                       fileCount: nil, directoryCount: nil, totalBytes: nil,
+                                       skippedPaths: [], errors: [message])
+        }
+        do {
+            let info = try readDiskInfo(id: disk.id)
+            guard StorageDiskSafety.assess(info) == .externalPhysicalCandidate,
+                  info["DeviceIdentifier"] as? String == disk.id,
+                  (info["Size"] as? NSNumber)?.uint64Value == disk.size else {
+                return failed("Физический накопитель изменился или не прошёл проверку")
+            }
+            let parts = try StoragePartitionInspector.partitions(for: disk.id)
+            var roots: [(String, String)] = []
+            for part in parts {
+                guard part.id.range(of: "^" + disk.id + "s[0-9]+$", options: .regularExpression) != nil else {
+                    return failed("Некорректный раздел выбранного диска")
+                }
+                let details = try readDiskInfo(id: part.id)
+                guard details["DeviceIdentifier"] as? String == part.id,
+                      details["ParentWholeDisk"] as? String == disk.id else {
+                    return failed("Не удалось подтвердить принадлежность раздела физическому диску")
+                }
+                guard let mount = details["MountPoint"] as? String,
+                      mount.hasPrefix("/Volumes/"), mount.count > "/Volumes/".count else { continue }
+                let root = URL(fileURLWithPath: mount, isDirectory: true)
+                if FileManager.default.fileExists(atPath: root.appendingPathComponent("emuMMC/emummc.ini").path) {
+                    roots.append((part.id, mount))
+                }
+            }
+            guard roots.count == 1, let chosen = roots.first else {
+                return failed(roots.isEmpty ? "Не найден том с конфигурацией emuMMC" : "Обнаружено несколько томов с emuMMC")
+            }
+            let again = try readDiskInfo(id: chosen.0)
+            guard again["DeviceIdentifier"] as? String == chosen.0,
+                  again["ParentWholeDisk"] as? String == disk.id,
+                  again["MountPoint"] as? String == chosen.1 else {
+                return failed("Том изменился во время проверки")
+            }
+            let root = URL(fileURLWithPath: chosen.1, isDirectory: true)
+            let policy = SakuraMigrationInventory.Policy.excludeKnownMacOSMetadata
+            let inventory = SakuraMigrationInventory.inspect(root: root, policy: policy)
+            let manifest = SakuraMigrationManifest.inspect(root: root, policy: policy)
+            let matching = inventory.complete && manifest.complete &&
+                UInt64(manifest.fileCount) == inventory.fileCount &&
+                UInt64(manifest.directoryCount + 1) == inventory.directoryCount &&
+                manifest.totalLogicalBytes == inventory.totalLogicalBytes &&
+                manifest.skippedPaths == inventory.skippedPaths
+            let errors = inventory.errors + manifest.errors +
+                (matching ? [] : ["Inventory и Manifest не согласованы"])
+            return StorageInventoryScanResult(
+                complete: matching, summary: matching ? "Inventory и Manifest совпали" : "Инвентаризация не завершена",
+                fileCount: matching ? manifest.fileCount : nil,
+                directoryCount: matching ? manifest.directoryCount + 1 : nil,
+                totalBytes: matching ? manifest.totalLogicalBytes : nil,
+                skippedPaths: manifest.skippedPaths, errors: errors)
+        } catch {
+            return failed(error.localizedDescription)
         }
     }
 
