@@ -48,6 +48,7 @@ struct StorageCenterDashboard: View {
         let emummcDetails: [String]
         let conflictStatus: String
         let conflictDetails: [String]
+        let readiness: SakuraMigrationReadiness.Report?
     }
 
     private struct LogEvent: Identifiable {
@@ -384,26 +385,24 @@ struct StorageCenterDashboard: View {
                    result.destinationID == selectedDestination {
                     GroupBox("Итог предварительной проверки") {
                         VStack(alignment: .leading, spacing: 9) {
-                            if let bytes = result.bytes, let free = result.free, bytes > free {
-                                Label("Перенос заблокирован: недостаточно места",
-                                      systemImage: "xmark.octagon.fill")
+                            if let readiness = result.readiness {
+                                Label(readiness.status == .blocked ? "Перенос заблокирован" :
+                                      "Требуются дополнительные проверки",
+                                      systemImage: readiness.status == .blocked ?
+                                      "xmark.octagon.fill" : "exclamationmark.triangle.fill")
                                     .foregroundStyle(.orange)
                                     .fontWeight(.semibold)
-                                Text("Не хватает минимум \(sizeText(bytes - free)) без учёта резерва и размещения FAT32.")
-                            } else if let warning = result.warning {
+                                ForEach(readiness.messages, id: \.self) { message in
+                                    Text(message)
+                                }
+                                if let bytes = result.bytes, let free = result.free, bytes > free {
+                                    Text("Не хватает минимум \(sizeText(bytes - free)) без учёта резерва и FAT32.")
+                                }
+                            } else {
                                 Label("Готовность не определена: диагностика неполная",
                                       systemImage: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.orange)
-                                Text(warning)
-                            } else if result.bytes == nil || result.free == nil {
-                                Label("Готовность не определена: недостаточно данных",
-                                      systemImage: "questionmark.circle")
-                                    .foregroundStyle(.orange)
-                            } else {
-                                Label("Требуются дополнительные проверки",
-                                      systemImage: "exclamationmark.triangle")
-                                    .foregroundStyle(.orange)
-                                Text("Логический объём файлов помещается, но это не подтверждает готовность к переносу.")
+                                if let warning = result.warning { Text(warning) }
                             }
                             Text("Структура emuMMC: \(result.emummcStatus)")
                             Text("Конфликты назначения: \(result.conflictStatus)")
@@ -679,18 +678,46 @@ struct StorageCenterDashboard: View {
                 if excludedCount > 0 {
                     conflictDetails.append("Исключено путей из двух манифестов: \(excludedCount). Требуется проверка.")
                 }
+                // Assessment uses only facts established by this read-only scan.
+                // Reserve remains unknown, and excluded paths are not automatically approved.
+                let structureConfirmed = emummcStatus == "Файловая emuMMC: основные элементы найдены"
+                let conflictsAbsent: Bool?
+                switch conflicts.status {
+                case .noDetectedConflicts: conflictsAbsent = true
+                case .blocked: conflictsAbsent = false
+                case .needsMoreInformation: conflictsAbsent = nil
+                }
+                let plannerInput = SakuraMigrationPlanner.Input(
+                    sourceDiskID: sourceID,
+                    targetDiskID: targetID,
+                    sourceVerifiedExternalPhysical: true,
+                    targetVerifiedExternalPhysical: true,
+                    sourceAndTargetVolumesVerified: true,
+                    sourceFileBasedStructureVerified: structureConfirmed,
+                    requiredBytes: report.complete ? report.totalLogicalBytes : nil,
+                    targetAvailableBytes: free,
+                    reserveBytes: nil,
+                    targetConflictsAbsent: conflictsAbsent)
+                let readiness = SakuraMigrationReadiness.assess(.init(
+                    planner: plannerInput,
+                    excludedPathsReviewed: report.skippedPaths.isEmpty &&
+                        sourceManifest.skippedPaths.isEmpty && targetManifest.skippedPaths.isEmpty,
+                    inventoryComplete: report.complete && sourceManifest.complete && targetManifest.complete))
+
                 return CapacityScan(sourceID: sourceID, destinationID: targetID,
                     bytes: report.complete ? report.totalLogicalBytes : nil,
                     free: free, files: Int(report.fileCount), excluded: report.skippedPaths.count,
                     warning: report.complete ? nil : "Инвентаризация неполная: перенос заблокирован",
                     emummcStatus: emummcStatus, emummcDetails: emummcDetails,
-                    conflictStatus: conflictStatus, conflictDetails: conflictDetails)
+                    conflictStatus: conflictStatus, conflictDetails: conflictDetails,
+                    readiness: readiness)
             } catch {
                 return CapacityScan(sourceID: sourceID, destinationID: targetID,
                     bytes: nil, free: nil, files: 0, excluded: 0,
                     warning: "Не удалось независимо подтвердить диски и тома: \(error.localizedDescription)",
                     emummcStatus: "Проверка структуры не выполнена", emummcDetails: [],
-                    conflictStatus: "Проверка конфликтов не выполнена", conflictDetails: [])
+                    conflictStatus: "Проверка конфликтов не выполнена", conflictDetails: [],
+                    readiness: nil)
             }
         }.value
         capacityScan = result
