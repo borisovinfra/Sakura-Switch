@@ -78,7 +78,7 @@ let package = Package(
         // Presentation — SwiftUI app
         .executableTarget(
             name: "SakuraSwitch",
-            dependencies: ["Installer"],
+            dependencies: ["Installer", "StorageCore"],
             resources: [
                 .process("Resources")
             ]

@@ -7,6 +7,7 @@ struct ContentView: View {
     private enum SakuraSection: String, CaseIterable, Identifiable {
         case installation
         case sdCard
+        case storageCenter
         case saves
         case gamesAndMods
         case applications
@@ -22,6 +23,7 @@ struct ContentView: View {
             switch self {
             case .installation: return L10n.navInstallation
             case .sdCard: return L10n.navSDCard
+            case .storageCenter: return "Хранилище"
             case .saves: return L10n.navSaves
             case .gamesAndMods: return L10n.navGamesAndMods
             case .applications: return L10n.sidebarApplications
@@ -35,6 +37,7 @@ struct ContentView: View {
             switch self {
             case .installation: return "square.and.arrow.down"
             case .sdCard: return "externaldrive"
+            case .storageCenter: return "externaldrive.fill"
             case .saves: return "archivebox"
             case .gamesAndMods: return "puzzlepiece.extension"
             case .applications: return "square.grid.2x2"
@@ -106,6 +109,7 @@ struct ContentView: View {
             sidebarGroup([
                 .installation,
                 .sdCard,
+                .storageCenter,
                 .saves,
                 .gamesAndMods,
                 .applications
@@ -176,6 +180,8 @@ struct ContentView: View {
         case .installation, .sdCard, .dbiBackend, .ftp:
             workingInterface
 
+        case .storageCenter:
+            StorageCenterView()
         case .saves:
             SavesView(appState: appState)
         case .gamesAndMods:
