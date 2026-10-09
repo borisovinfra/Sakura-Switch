@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 import StorageCore
+import Darwin
+import CryptoKit
 
 /// Storage Center shell. All disk operations in this view are metadata reads only.
 /// Existing StorageCenterView remains the analysis engine and is not modified.
@@ -51,11 +53,33 @@ struct StorageCenterDashboard: View {
         let readiness: SakuraMigrationReadiness.Report?
     }
 
+    // Explicit semantic levels, not inferred from message wording.
+    private enum EventLevel {
+        case success, error, warning, info
+
+        var color: Color {
+            switch self {
+            case .success: return .green
+            case .error: return .red
+            case .warning: return .orange
+            case .info: return .blue
+            }
+        }
+        var icon: String {
+            switch self {
+            case .success: return "checkmark.circle.fill"
+            case .error: return "xmark.octagon.fill"
+            case .warning: return "exclamationmark.triangle.fill"
+            case .info: return "info.circle.fill"
+            }
+        }
+    }
+
     private struct LogEvent: Identifiable {
         let id = UUID()
         let time = Date()
         let message: String
-        let isWarning: Bool
+        let level: EventLevel
     }
 
     @State private var page: Page = .overview
@@ -65,6 +89,17 @@ struct StorageCenterDashboard: View {
     @State private var capacityScan: CapacityScan?
     @State private var capacityBusy = false
     @State private var diskRevision = 0
+
+    // Fixed-path test transfer only. Never transfers a selected user disk.
+    private enum TrialOutcome: Sendable {
+        case completed, stopped, failed(String)
+    }
+    @State private var trialBusy = false
+    @State private var trialCompleted = 0
+    @State private var trialStatus = "Тестовый перенос ещё не запускался."
+    @State private var trialLevel: EventLevel = .info
+    @State private var trialTask: Task<TrialOutcome, Never>?
+    @State private var showTrialConfirmation = false
     @State private var events: [LogEvent] = []
     @State private var busy = false
     @State private var scanned = false
@@ -123,7 +158,7 @@ struct StorageCenterDashboard: View {
             ForEach(Page.allCases) { item in
                 Button {
                     page = item
-                    events.insert(LogEvent(message: "Открыта вкладка «\(item.rawValue)»", isWarning: false), at: 0)
+                    events.insert(LogEvent(message: "Открыта вкладка «\(item.rawValue)»", level: .info), at: 0)
                 } label: {
                     Label(item.rawValue, systemImage: item.icon)
                         .font(.system(size: 12, weight: .medium))
@@ -248,7 +283,7 @@ struct StorageCenterDashboard: View {
             Spacer(minLength: 0)
             Button(selectedSource == disk.id ? "Выбран как источник" : "Выбрать источник") {
                 selectedSource = disk.id
-                events.insert(LogEvent(message: "Выбран источник \(disk.id). Данные не изменены.", isWarning: false), at: 0)
+                events.insert(LogEvent(message: "Выбран источник \(disk.id). Данные не изменены.", level: .info), at: 0)
             }
             .buttonStyle(.bordered)
             .frame(maxWidth: .infinity)
@@ -267,7 +302,7 @@ struct StorageCenterDashboard: View {
             VStack(alignment: .leading, spacing: 16) {
                 Label("Предпросмотр переноса", systemImage: "arrow.left.arrow.right")
                     .font(.title3.weight(.semibold))
-                Label("Только чтение. Копирование, форматирование и запись на диск отключены.",
+                Label("Выбранные диски — только диагностика. Отдельно доступен тестовый перенос в SAKURATEST.",
                       systemImage: "lock.shield")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -334,7 +369,7 @@ struct StorageCenterDashboard: View {
                                 if bytes > free {
                                     Label("Недостаточно места · не хватает \(sizeText(bytes - free))",
                                           systemImage: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(.red)
                                 } else {
                                     Label("Логический объём помещается без учёта резерва и накладных расходов файловой системы. Перенос не разрешён.",
                                           systemImage: "info.circle")
@@ -364,6 +399,7 @@ struct StorageCenterDashboard: View {
                     GroupBox("Структура emuMMC · только чтение") {
                         VStack(alignment: .leading, spacing: 7) {
                             Text(result.emummcStatus).fontWeight(.medium)
+                                    .foregroundStyle(result.emummcStatus.contains("основные элементы найдены") ? Color.green : Color.orange)
                             ForEach(result.emummcDetails, id: \.self) { line in
                                 Text(line).foregroundStyle(.secondary)
                             }
@@ -377,6 +413,7 @@ struct StorageCenterDashboard: View {
                     GroupBox("Конфликты назначения · только чтение") {
                         VStack(alignment: .leading, spacing: 7) {
                             Text(result.conflictStatus).fontWeight(.medium)
+                                    .foregroundStyle(result.conflictStatus.contains("конфликтов не найдено") ? Color.green : Color.orange)
                             ForEach(result.conflictDetails, id: \.self) { line in
                                 Text(line).foregroundStyle(.secondary)
                             }
@@ -399,7 +436,7 @@ struct StorageCenterDashboard: View {
                                       "Требуются дополнительные проверки",
                                       systemImage: readiness.status == .blocked ?
                                       "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(readiness.status == .blocked ? Color.red : Color.orange)
                                     .fontWeight(.semibold)
                                 ForEach(readiness.messages, id: \.self) { message in
                                     Text(message.contains("не хватает минимум") &&
@@ -424,13 +461,42 @@ struct StorageCenterDashboard: View {
                             }
                             Text("Не подтверждены: резерв и накладные расходы FAT32, исключения, неизменность данных и повторная проверка дисков перед записью.")
                                 .foregroundStyle(.secondary)
-                            Text("Запуск переноса отключён при любом результате этой диагностики.")
+                            Text("Перенос выбранных физических дисков отключён при любом результате диагностики.")
                                 .fontWeight(.semibold)
                         }
                         .font(.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 5)
                     }
+                }
+
+                GroupBox("Тестовый перенос · только искусственные файлы") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Тест копирует два файла из .storage-tests на SAKURATEST/SakuraStorageTest. Выбранные вверху диски не участвуют. NINTENDO никогда не используется как источник теста.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ProgressView(value: Double(trialCompleted), total: 2)
+                        Text("Проверено файлов: \(trialCompleted) из 2")
+                            .font(.caption.monospacedDigit())
+                        Text(trialStatus)
+                            .font(.caption)
+                            .foregroundStyle(trialLevel.color)
+                        HStack {
+                            Button("Начать тестовый перенос") { showTrialConfirmation = true }
+                                .disabled(trialBusy || busy || capacityBusy)
+                            Button("Остановить") { trialTask?.cancel() }
+                                .disabled(!trialBusy)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
+                }
+                .confirmationDialog("Подтвердить тестовую запись на SAKURATEST?",
+                                    isPresented: $showTrialConfirmation, titleVisibility: .visible) {
+                    Button("Записать два искусственных файла") { startTrialTransfer() }
+                    Button("Отмена", role: .cancel) { }
+                } message: {
+                    Text("Только внутри /Volumes/SAKURATEST/SakuraStorageTest. Никаких файлов NINTENDO, форматирования или перезаписи. Остановка проверяется между файлами.")
                 }
 
                 GroupBox("Безопасность") {
@@ -441,7 +507,7 @@ struct StorageCenterDashboard: View {
                               systemImage: "info.circle")
                         Label("Для переноса нужны отдельные проверки структуры, конфликтов, места и повторная идентификация дисков.",
                               systemImage: "exclamationmark.triangle")
-                        Text("Запуск переноса пока недоступен независимо от выбранных дисков.")
+                        Text("Перенос выбранных накопителей пока недоступен. Разрешён только изолированный тестовый перенос.")
                             .fontWeight(.semibold)
                     }
                     .font(.caption)
@@ -555,12 +621,13 @@ struct StorageCenterDashboard: View {
                             Text(event.time, style: .time)
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                            Image(systemName: "circle.fill")
-                                .font(.system(size: 7))
-                                .foregroundStyle(event.isWarning ? Color.orange : Color.blue)
+                            Image(systemName: event.level.icon)
+                                .font(.system(size: 11))
+                                .foregroundStyle(event.level.color)
                                 .padding(.top, 4)
                             Text(event.message)
                                 .font(.caption)
+                                .foregroundStyle(event.level.color)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.horizontal, 12)
@@ -751,7 +818,107 @@ struct StorageCenterDashboard: View {
               selectedSource == result.sourceID,
               selectedDestination == result.destinationID else { return }
         capacityScan = result
-        events.insert(LogEvent(message: "Проверка вместимости: \(result.warning ?? "оценка файлов завершена")", isWarning: result.warning != nil), at: 0)
+        events.insert(LogEvent(message: "Проверка вместимости: \(result.warning ?? "оценка файлов завершена")", level: result.warning != nil ? .warning : .info), at: 0)
+    }
+
+    // Test-only fixed-path transfer; never use the selected disk values for writes.
+    @MainActor
+    private func startTrialTransfer() {
+        guard !trialBusy else { return }
+        trialBusy = true
+        trialCompleted = 0
+        trialStatus = "Проверяем тестовый том…"
+        trialLevel = .info
+        let job = Task.detached(priority: .userInitiated) { () -> TrialOutcome in
+            let destination = "/Volumes/SAKURATEST/SakuraStorageTest/SakuraPreparerFAT32Test/Nintendo/save"
+            let file = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Downloads/SakuraSwitch-StorageCenter/.storage-tests/sakura-verified-copy-source.bin")
+            let names = ["sakura-ui-test-01.bin", "sakura-ui-test-02.bin"]
+            func validate() throws {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
+                process.arguments = ["info", "-plist", "disk3s2"]
+                let output = Pipe()
+                process.standardOutput = output
+                process.standardError = FileHandle.nullDevice
+                try process.run()
+                let data = output.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                guard process.terminationStatus == 0,
+                      let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                      info["DeviceIdentifier"] as? String == "disk3s2",
+                      info["ParentWholeDisk"] as? String == "disk3",
+                      info["MountPoint"] as? String == "/Volumes/SAKURATEST",
+                      info["FilesystemName"] as? String == "MS-DOS FAT32",
+                      (info["VolumeUUID"] as? String)?.uppercased() == "3AA79100-9818-33B6-AEDC-19D2A8D50019"
+                else { throw NSError(domain: "SakuraTrial", code: 1, userInfo: [NSLocalizedDescriptionKey: "Тестовый FAT32-том не подтверждён"]) }
+                var fs = statfs()
+                guard statfs(destination, &fs) == 0 else {
+                    throw NSError(domain: "SakuraTrial", code: 2, userInfo: [NSLocalizedDescriptionKey: "Каталог тестового назначения недоступен"])
+                }
+                let device = withUnsafeBytes(of: fs.f_mntfromname) { raw in
+                    String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
+                }
+                let mount = withUnsafeBytes(of: fs.f_mntonname) { raw in
+                    String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
+                }
+                guard device == "/dev/disk3s2", mount == "/Volumes/SAKURATEST" else {
+                    throw NSError(domain: "SakuraTrial", code: 3, userInfo: [NSLocalizedDescriptionKey: "Подмена точки монтирования"])
+                }
+            }
+            do {
+                let data = try Data(contentsOf: file)
+                let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                guard data.count == 135168,
+                      digest == "56f11bf1b3189a1c7730049b58405566ca7be547f9dbaf01c6c86e5b75e1fdb0" else {
+                    throw NSError(domain: "SakuraTrial", code: 4, userInfo: [NSLocalizedDescriptionKey: "Искусственный источник не совпадает с проверенным образцом"])
+                }
+                try validate()
+                for (index, name) in names.enumerated() {
+                    if Task.isCancelled { return .stopped }
+                    try validate()
+                    let receipt = try SakuraVerifiedCopy.copy(source: file,
+                        toDirectory: URL(fileURLWithPath: destination, isDirectory: true), name: name)
+                    guard receipt.bytes == 135168, receipt.sha256 == digest else {
+                        throw NSError(domain: "SakuraTrial", code: 5, userInfo: [NSLocalizedDescriptionKey: "Не совпала контрольная сумма копии"])
+                    }
+                    await MainActor.run {
+                        trialCompleted = index + 1
+                        trialStatus = "Файл \(index + 1) из 2 проверен (SHA-256)."
+                        trialLevel = .success
+                    }
+                }
+                return .completed
+            } catch {
+                return .failed(error.localizedDescription)
+            }
+        }
+        trialTask = job
+        Task { @MainActor in
+            let outcome = await job.value
+            trialBusy = false
+            trialTask = nil
+            switch outcome {
+            case .completed:
+                trialStatus = "Тестовый перенос завершён: оба файла проверены."
+                trialLevel = .success
+                events.insert(LogEvent(message: "Тестовый перенос: 2 искусственных файла проверены", level: .success), at: 0)
+            case .stopped:
+                trialStatus = "Остановлено между файлами. Уже записанные тестовые файлы остаются на месте."
+                trialLevel = .warning
+                events.insert(LogEvent(message: "Тестовый перенос остановлен", level: .warning), at: 0)
+            case .failed(let message):
+                if message == "alreadyExists" {
+                    trialStatus = "Тестовые файлы уже существуют. Повторная запись запрещена."
+                    trialLevel = .warning
+                    events.insert(LogEvent(message: trialStatus, level: .warning), at: 0)
+                } else {
+                    trialStatus = "Ошибка тестового переноса: \(message)"
+                    trialLevel = .error
+                    events.insert(LogEvent(message: trialStatus, level: .error), at: 0)
+                }
+            }
+        }
     }
 
     @MainActor
@@ -836,6 +1003,6 @@ struct StorageCenterDashboard: View {
         }
         let text = result.error.map { "Ошибка поиска накопителей: \($0)" }
             ?? "Проверено внешних физических накопителей: \(result.disks.count)"
-        events.insert(LogEvent(message: text, isWarning: result.error != nil), at: 0)
+        events.insert(LogEvent(message: text, level: result.error != nil ? .error : .info), at: 0)
     }
 }
