@@ -100,6 +100,11 @@ struct StorageCenterDashboard: View {
     @State private var trialLevel: EventLevel = .info
     @State private var trialTask: Task<TrialOutcome, Never>?
     @State private var showTrialConfirmation = false
+
+    @State private var migrationScanBusy = false
+    @State private var migrationScanStatus = "Полный перенос ещё не подготовлен."
+    @State private var migrationScanLevel: EventLevel = .info
+
     @State private var events: [LogEvent] = []
     @State private var busy = false
     @State private var scanned = false
@@ -470,6 +475,28 @@ struct StorageCenterDashboard: View {
                     }
                 }
 
+                GroupBox("Полный перенос файловой microSD") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Источник: NINTENDO · Назначение: виртуальная SAKURASD")
+                            .font(.caption)
+
+                        Text(migrationScanStatus)
+                            .font(.caption)
+                            .foregroundStyle(migrationScanLevel.color)
+
+                        Button("Подготовить перенос NINTENDO → SAKURASD") {
+                            Task { await prepareFullMigration() }
+                        }
+                        .disabled(migrationScanBusy || busy || capacityBusy)
+
+                        if migrationScanBusy {
+                            ProgressView("Составляем полный файловый манифест…")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
+                }
+
                 GroupBox("Тестовый перенос · только искусственные файлы") {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Тест копирует два файла из .storage-tests на SAKURATEST/SakuraStorageTest. Выбранные вверху диски не участвуют. NINTENDO никогда не используется как источник теста.")
@@ -819,6 +846,66 @@ struct StorageCenterDashboard: View {
               selectedDestination == result.destinationID else { return }
         capacityScan = result
         events.insert(LogEvent(message: "Проверка вместимости: \(result.warning ?? "оценка файлов завершена")", level: result.warning != nil ? .warning : .info), at: 0)
+    }
+
+    // Read-only preparation of the actual Nintendo file manifest.
+    @MainActor
+    private func prepareFullMigration() async {
+        guard !migrationScanBusy else { return }
+
+        migrationScanBusy = true
+        migrationScanLevel = .info
+        migrationScanStatus = "Проверяем файловую структуру NINTENDO…"
+
+        let result = await Task.detached(priority: .userInitiated) {
+            let root = URL(fileURLWithPath: "/Volumes/NINTENDO", isDirectory: true)
+            let manifest = SakuraMigrationManifest.inspect(
+                root: root,
+                policy: .excludeKnownMacOSMetadata
+            )
+
+            guard manifest.complete, let bytes = manifest.totalLogicalBytes else {
+                return (
+                    false,
+                    "Манифест неполный: " + manifest.errors.prefix(3).joined(separator: "; ")
+                )
+            }
+
+            do {
+                let folders = manifest.entries
+                    .filter { $0.kind == .directory }
+                    .map(\.relativePath)
+                let files = manifest.entries
+                    .filter { $0.kind == .file }
+                    .map(\.relativePath)
+
+                _ = try SakuraDestinationDirectoryPlan.make(
+                    directories: folders, files: files
+                )
+
+                let description = ByteCountFormatter.string(
+                    fromByteCount: Int64(clamping: bytes),
+                    countStyle: .file
+                )
+
+                return (
+                    true,
+                    "Манифест: \(files.count) файлов, \(description). " +
+                    "Исключений macOS: \(manifest.skippedPaths.count). " +
+                    "Перенос ожидает подтверждения."
+                )
+            } catch {
+                return (false, "Проверка путей: \(error)")
+            }
+        }.value
+
+        migrationScanBusy = false
+        migrationScanStatus = result.1
+        migrationScanLevel = result.0 ? .success : .error
+        events.insert(
+            LogEvent(message: result.1, level: migrationScanLevel),
+            at: 0
+        )
     }
 
     // Test-only fixed-path transfer; never use the selected disk values for writes.

@@ -81,12 +81,45 @@ public enum SakuraFileMigrationRunner {
         journalDirectory: URL,
         session: String,
         checkpoint: SakuraTransferJournal.Checkpoint,
+        savedSession: SakuraMigrationSession.Record,
+        sourceVolumeUUID: String,
+        targetVolumeUUID: String,
         revalidate: () throws -> Void,
         shouldStop: () -> Bool,
         onProgress: (SakuraResumableTransfer.Progress) -> Void
     ) throws -> SakuraResumableTransfer.Result {
 
-        try revalidate()
+        func verifySession() throws {
+            try revalidate()
+
+            let current = try SakuraMigrationSession.make(
+                sessionID: session,
+                sourceVolumeUUID: sourceVolumeUUID,
+                targetVolumeUUID: targetVolumeUUID,
+                manifest: preparation.manifest,
+                approvedSkippedPaths: preparation.approvedSkippedPaths
+            )
+
+            let passportURL = journalDirectory.appendingPathComponent(
+                session + ".session.json"
+            )
+
+            let persisted = try SakuraMigrationSession.load(
+                from: passportURL
+            )
+
+            try SakuraMigrationSession.validate(
+                saved: persisted,
+                current: current
+            )
+
+            try SakuraMigrationSession.validate(
+                saved: persisted,
+                current: savedSession
+            )
+        }
+
+        try verifySession()
 
         var previousBytes: UInt64 = 0
         for file in checkpoint.files {
@@ -119,7 +152,7 @@ public enum SakuraFileMigrationRunner {
             root: destinationRoot
         )
 
-        try revalidate()
+        try verifySession()
 
         var validationFailure: Error?
 
@@ -136,7 +169,7 @@ public enum SakuraFileMigrationRunner {
                 shouldStop: {
                     if shouldStop() { return true }
                     do {
-                        try revalidate()
+                        try verifySession()
                         return false
                     } catch {
                         validationFailure = error
@@ -152,7 +185,7 @@ public enum SakuraFileMigrationRunner {
             throw error
         }
 
-        try revalidate()
+        try verifySession()
 
         let count = try SakuraTransferJournal.verify(
             result.checkpoint,
