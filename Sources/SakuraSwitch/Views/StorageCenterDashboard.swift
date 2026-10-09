@@ -379,6 +379,49 @@ struct StorageCenterDashboard: View {
                     }
                 }
 
+                if let result = capacityScan,
+                   result.sourceID == selectedSource,
+                   result.destinationID == selectedDestination {
+                    GroupBox("Итог предварительной проверки") {
+                        VStack(alignment: .leading, spacing: 9) {
+                            if let bytes = result.bytes, let free = result.free, bytes > free {
+                                Label("Перенос заблокирован: недостаточно места",
+                                      systemImage: "xmark.octagon.fill")
+                                    .foregroundStyle(.orange)
+                                    .fontWeight(.semibold)
+                                Text("Не хватает минимум \(sizeText(bytes - free)) без учёта резерва и размещения FAT32.")
+                            } else if let warning = result.warning {
+                                Label("Готовность не определена: диагностика неполная",
+                                      systemImage: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Text(warning)
+                            } else if result.bytes == nil || result.free == nil {
+                                Label("Готовность не определена: недостаточно данных",
+                                      systemImage: "questionmark.circle")
+                                    .foregroundStyle(.orange)
+                            } else {
+                                Label("Требуются дополнительные проверки",
+                                      systemImage: "exclamationmark.triangle")
+                                    .foregroundStyle(.orange)
+                                Text("Логический объём файлов помещается, но это не подтверждает готовность к переносу.")
+                            }
+                            Text("Структура emuMMC: \(result.emummcStatus)")
+                            Text("Конфликты назначения: \(result.conflictStatus)")
+                            if result.excluded > 0 {
+                                Text("Исключённые служебные пути: \(result.excluded). Необходимо проверить отдельно.")
+                                    .foregroundStyle(.orange)
+                            }
+                            Text("Не подтверждены: резерв и накладные расходы FAT32, исключения, неизменность данных и повторная проверка дисков перед записью.")
+                                .foregroundStyle(.secondary)
+                            Text("Запуск переноса отключён при любом результате этой диагностики.")
+                                .fontWeight(.semibold)
+                        }
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 5)
+                    }
+                }
+
                 GroupBox("Безопасность") {
                     VStack(alignment: .leading, spacing: 8) {
                         Label("Источник и назначение должны быть разными физическими дисками.",
