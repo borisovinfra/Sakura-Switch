@@ -393,9 +393,45 @@ private enum SafeExternalDiskScanner {
             let (root, config) = found[0]
             // RAW geometry/GPP size is not inferred. The diagnostic reports missing inputs.
             let report = SakuraStorageDiagnostic.inspect(configuration: config, sdRoot: root)
+            var messages = report.messages
+            if config.mode == .fileBased && report.status == .structurePresent {
+                // Validate the relative Hekate path before inspecting file metadata.
+                if let path = config.path {
+                    let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+                    let rootResolved = root.standardizedFileURL.resolvingSymlinksInPath()
+                    let directory = parts.reduce(rootResolved) {
+                        $0.appendingPathComponent($1, isDirectory: true)
+                    }.appendingPathComponent("eMMC", isDirectory: true)
+                        .standardizedFileURL.resolvingSymlinksInPath()
+                    let prefix = rootResolved.path.hasSuffix("/") ? rootResolved.path : rootResolved.path + "/"
+                    if parts.count >= 2 && parts.first?.lowercased() == "emummc" &&
+                       !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." || $0.contains("\\") }) &&
+                       !path.hasPrefix("/") && directory.path.hasPrefix(prefix) {
+                        let nand = SakuraNANDStructureValidator.inspect(eMMCDirectory: directory)
+                        if nand.status.rawValue == "consistentMetadata" {
+                            messages.append("Структура NAND: метаданные согласованы")
+                        } else {
+                            messages.append("Структура NAND: выявлены проблемы или недостаточно данных")
+                        }
+                        messages.append("Фрагменты GPP: \(nand.chunkCount)")
+                        if let bytes = nand.gppBytes {
+                            messages.append("Размер GPP: \(ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .binary))")
+                        }
+                        if let bytes = nand.totalBytes {
+                            messages.append("Общий размер emuMMC: \(ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .binary))")
+                        }
+                        messages.append(contentsOf: nand.messages)
+                        messages.append("Целостность содержимого NAND не проверена")
+                    } else {
+                        messages.append("Расширенная проверка NAND пропущена: небезопасный путь")
+                    }
+                } else {
+                    messages.append("Расширенная проверка NAND пропущена: путь не задан")
+                }
+            }
             return EmuMMCScanResult(found: true, title: "Конфигурация Hekate обнаружена",
-                                   mode: displayMode(config.mode), status: displayStatus(report.status),
-                                   messages: report.messages)
+                                    mode: displayMode(config.mode), status: displayStatus(report.status),
+                                    messages: messages)
         } catch {
             return info("Диагностика недоступна: \(error.localizedDescription)")
         }
