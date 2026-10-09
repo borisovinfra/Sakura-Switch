@@ -9,6 +9,10 @@ struct StorageCenterView: View {
     @State private var loading = false
     @State private var hasScanned = false
     @State private var scanError: String?
+    @State private var partitions: [StoragePartitionRow] = []
+    @State private var partitionLoading = false
+    @State private var partitionError: String?
+    @State private var partitionRequestID = UUID()
 
     var body: some View {
         ScrollView {
@@ -58,6 +62,12 @@ struct StorageCenterView: View {
                             ForEach(disks) { disk in
                                 Button {
                                     selectedDiskID = disk.id
+                                    partitionRequestID = UUID()
+                                    partitions = []
+                                    partitionError = nil
+                                    partitionLoading = true
+                                    let requestID = partitionRequestID
+                                    Task { await loadPartitions(for: disk, requestID: requestID) }
                                 } label: {
                                     HStack(spacing: 10) {
                                         Image(systemName: "externaldrive")
@@ -91,6 +101,50 @@ struct StorageCenterView: View {
                     Text("Накопители")
                 }
 
+                GroupBox("Разделы выбранного накопителя") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if let selectedDiskID {
+                            Text("Диск: \(selectedDiskID)").font(.subheadline.weight(.semibold))
+                            if partitionLoading {
+                                ProgressView("Читаем таблицу разделов…")
+                            } else if let partitionError {
+                                Label(partitionError, systemImage: "exclamationmark.triangle")
+                                    .foregroundStyle(.orange)
+                            } else if partitions.isEmpty {
+                                Text("Разделы не обнаружены или отсутствуют в таблице.")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(partitions) { part in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(part.id).font(.subheadline.weight(.semibold))
+                                        Text("Тип: \(part.content) · \(part.volumeName ?? "Без имени")")
+                                        Text("Размер: \(ByteCountFormatter.string(fromByteCount: Int64(clamping: part.size), countStyle: .file))")
+                                        if let offset = part.offsetBytes, let block = part.blockSizeBytes {
+                                            Text("Смещение: \(offset) байт · Блок: \(block) байт")
+                                        } else {
+                                            Text("Геометрия раздела не подтверждена")
+                                                .foregroundStyle(.orange)
+                                        }
+                                    }
+                                    .font(.caption)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(8)
+                                    .background(Color.secondary.opacity(0.07))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                }
+                            }
+                        } else {
+                            Text("Сначала выберите внешний физический накопитель.")
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("Тип раздела сообщается macOS. Он не подтверждает наличие RAW emuMMC.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
+                }
+
                 GroupBox("Диагностика emuMMC") {
                     VStack(alignment: .leading, spacing: 8) {
                         if let selectedDiskID, disks.contains(where: { $0.id == selectedDiskID }) {
@@ -121,8 +175,25 @@ struct StorageCenterView: View {
     }
 
     @MainActor
+    private func loadPartitions(for disk: SafeExternalDisk, requestID: UUID) async {
+        let result = await Task.detached(priority: .userInitiated) {
+            SafeExternalDiskScanner.inspectPartitions(on: disk)
+        }.value
+        guard partitionRequestID == requestID, selectedDiskID == disk.id else { return }
+        partitionLoading = false
+        partitions = result.partitions
+        partitionError = result.error
+    }
+
+    @MainActor
     private func refresh() async {
         guard !loading else { return }
+        // Invalidate any prior partition task before rescanning detachable disks.
+        partitionRequestID = UUID()
+        selectedDiskID = nil
+        partitions = []
+        partitionError = nil
+        partitionLoading = false
         loading = true
         scanError = nil
         let result = await Task.detached(priority: .userInitiated) {
@@ -146,6 +217,20 @@ private struct SafeExternalDisk: Identifiable, Sendable {
 
 private struct DiskScanResult: Sendable {
     let disks: [SafeExternalDisk]
+    let error: String?
+}
+
+private struct StoragePartitionRow: Identifiable, Sendable {
+    let id: String
+    let content: String
+    let volumeName: String?
+    let size: UInt64
+    let offsetBytes: UInt64?
+    let blockSizeBytes: UInt64?
+}
+
+private struct PartitionScanResult: Sendable {
+    let partitions: [StoragePartitionRow]
     let error: String?
 }
 
@@ -178,6 +263,38 @@ private enum SafeExternalDiskScanner {
             return DiskScanResult(disks: verified, error: nil)
         } catch {
             return DiskScanResult(disks: [], error: "Не удалось проверить диски: \(error.localizedDescription)")
+        }
+    }
+
+    static func inspectPartitions(on disk: SafeExternalDisk) -> PartitionScanResult {
+        do {
+            // Re-check the same physical disk immediately before inspecting partitions.
+            let info = try readDiskInfo(id: disk.id)
+            guard (info["DeviceIdentifier"] as? String) == disk.id,
+                  StorageDiskSafety.assess(info) == .externalPhysicalCandidate,
+                  let size = info["Size"] as? NSNumber,
+                  size.uint64Value == disk.size else {
+                return PartitionScanResult(partitions: [], error: "Накопитель изменился или не прошёл повторную проверку")
+            }
+            let found = try StoragePartitionInspector.partitions(for: disk.id)
+            let identifierPrefix = disk.id + "s"
+            var result: [StoragePartitionRow] = []
+            for part in found {
+                guard part.id.hasPrefix(identifierPrefix),
+                      part.id.dropFirst(identifierPrefix.count).allSatisfy({ $0.isNumber }),
+                      !part.id.dropFirst(identifierPrefix.count).isEmpty else {
+                    return PartitionScanResult(partitions: [], error: "Обнаружен неожиданный идентификатор раздела")
+                }
+                let geometry = try? StoragePartitionGeometryInspector.inspect(partition: part.id)
+                result.append(StoragePartitionRow(
+                    id: part.id, content: part.content, volumeName: part.volumeName,
+                    size: part.size, offsetBytes: geometry?.offsetBytes,
+                    blockSizeBytes: geometry?.blockSizeBytes
+                ))
+            }
+            return PartitionScanResult(partitions: result, error: nil)
+        } catch {
+            return PartitionScanResult(partitions: [], error: "Не удалось получить разделы: \(error.localizedDescription)")
         }
     }
 
