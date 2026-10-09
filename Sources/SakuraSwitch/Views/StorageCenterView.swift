@@ -268,6 +268,26 @@ private struct EmuMMCScanResult: Sendable {
 }
 
 private enum SafeExternalDiskScanner {
+    // User-facing names only. Keep StorageCore enum values unchanged.
+    private static func displayMode(_ mode: SakuraEmuMMCDetector.Mode) -> String {
+        switch mode {
+        case .fileBased: return "Файловая emuMMC"
+        case .partitionBased: return "Разделовая emuMMC (RAW)"
+        case .disabled: return "emuMMC отключена"
+        case .unknown: return "Тип emuMMC не определён"
+        }
+    }
+
+    private static func displayStatus(_ status: SakuraStorageDiagnostic.Status) -> String {
+        switch status {
+        case .structurePresent: return "Структура обнаружена"
+        case .incomplete: return "Неполная структура"
+        case .invalid: return "Обнаружена ошибка"
+        case .needsMoreInformation: return "Недостаточно данных"
+        case .disabled: return "emuMMC отключена"
+        }
+    }
+
     static func scan() -> DiskScanResult {
         do {
             let candidates = try StorageInspector.externalDisks()
@@ -374,7 +394,7 @@ private enum SafeExternalDiskScanner {
             // RAW geometry/GPP size is not inferred. The diagnostic reports missing inputs.
             let report = SakuraStorageDiagnostic.inspect(configuration: config, sdRoot: root)
             return EmuMMCScanResult(found: true, title: "Конфигурация Hekate обнаружена",
-                                   mode: config.mode.rawValue, status: report.status.rawValue,
+                                   mode: displayMode(config.mode), status: displayStatus(report.status),
                                    messages: report.messages)
         } catch {
             return info("Диагностика недоступна: \(error.localizedDescription)")
