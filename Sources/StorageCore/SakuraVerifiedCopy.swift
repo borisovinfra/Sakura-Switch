@@ -41,13 +41,22 @@ public enum SakuraVerifiedCopy {
             throw Failure.unsafeSource
         }
 
-        let temp = dir.appendingPathComponent(".sakura-partial-\(UUID().uuidString)")
-        let dstFD = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, mode_t(0o600))
+        // Pin the verified destination directory for all destination operations.
+        let dirFD = open(dir.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard dirFD >= 0 else { throw Failure.unsafeDestination }
+        defer { close(dirFD) }
+        var dirInfo = stat()
+        guard fstat(dirFD, &dirInfo) == 0,
+              (dirInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+            throw Failure.unsafeDestination
+        }
+        let tempName = ".sakura-partial-\(UUID().uuidString)"
+        let dstFD = openat(dirFD, tempName, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, mode_t(0o600))
         guard dstFD >= 0 else { throw Failure.unsafeDestination }
         var dstOpen = true
         defer {
             if dstOpen { close(dstFD) }
-            unlink(temp.path)
+            _ = unlinkat(dirFD, tempName, 0)
         }
         var srcHash = SHA256()
         var transferred: UInt64 = 0
@@ -78,7 +87,7 @@ public enum SakuraVerifiedCopy {
         dstOpen = false
 
         let expected = Data(srcHash.finalize())
-        let verifyFD = open(temp.path, O_RDONLY | O_NOFOLLOW)
+        let verifyFD = openat(dirFD, tempName, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         guard verifyFD >= 0 else { throw Failure.io("verification open failed") }
         defer { close(verifyFD) }
         var destHash = SHA256()
@@ -91,7 +100,7 @@ public enum SakuraVerifiedCopy {
         guard Data(destHash.finalize()) == expected else { throw Failure.checksumMismatch }
         // FAT32 has no hard links. macOS RENAME_EXCL publishes without replacing
         // an existing destination; regular rename() is unsafe here.
-        guard renameatx_np(AT_FDCWD, temp.path, AT_FDCWD, final.path,
+        guard renameatx_np(dirFD, tempName, dirFD, name,
                            UInt32(RENAME_EXCL)) == 0 else {
             let code = errno
             if code == EEXIST { throw Failure.alreadyExists }
