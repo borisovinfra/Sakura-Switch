@@ -44,6 +44,10 @@ struct StorageCenterDashboard: View {
         let files: Int
         let excluded: Int
         let warning: String?
+        let emummcStatus: String
+        let emummcDetails: [String]
+        let conflictStatus: String
+        let conflictDetails: [String]
     }
 
     private struct LogEvent: Identifiable {
@@ -344,6 +348,37 @@ struct StorageCenterDashboard: View {
                     }
                 }
 
+                if let result = capacityScan,
+                   result.sourceID == selectedSource,
+                   result.destinationID == selectedDestination {
+                    GroupBox("Структура emuMMC · только чтение") {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(result.emummcStatus).fontWeight(.medium)
+                            ForEach(result.emummcDetails, id: \.self) { line in
+                                Text(line).foregroundStyle(.secondary)
+                            }
+                            Text("Проверяется только структура файлов; здоровье NAND и загрузка консоли не подтверждаются.")
+                                .foregroundStyle(.orange)
+                        }
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 5)
+                    }
+                    GroupBox("Конфликты назначения · только чтение") {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(result.conflictStatus).fontWeight(.medium)
+                            ForEach(result.conflictDetails, id: \.self) { line in
+                                Text(line).foregroundStyle(.secondary)
+                            }
+                            Text("Сравнение по файловым манифестам. Исключения и изменения после сканирования требуют отдельной проверки.")
+                                .foregroundStyle(.orange)
+                        }
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 5)
+                    }
+                }
+
                 GroupBox("Безопасность") {
                     VStack(alignment: .leading, spacing: 8) {
                         Label("Источник и назначение должны быть разными физическими дисками.",
@@ -544,17 +579,75 @@ struct StorageCenterDashboard: View {
             }
             do {
                 let (sourceURL, _) = try mountedVolume(sourceID)
-                let (_, free) = try mountedVolume(targetID)
+                let (targetURL, free) = try mountedVolume(targetID)
                 let report = SakuraMigrationInventory.inspect(root: sourceURL,
                     policy: .excludeKnownMacOSMetadata)
+
+                // Independent structural check; no NAND contents are read.
+                let configURL = sourceURL.appendingPathComponent("emuMMC/emummc.ini")
+                let emummcStatus: String
+                var emummcDetails: [String] = []
+                if let configuration = try? SakuraEmuMMCDetector.inspect(fileAt: configURL) {
+                    switch configuration.mode {
+                    case .fileBased:
+                        let structure = SakuraStorageValidator.inspectFileBased(sdRoot: sourceURL,
+                            configuration: configuration)
+                        emummcStatus = structure.status == .structurePresent
+                            ? "Файловая emuMMC: основные элементы найдены"
+                            : "Файловая emuMMC: структура не подтверждена (\(structure.status.rawValue))"
+                        emummcDetails = structure.messages
+                    case .partitionBased:
+                        emummcStatus = "Разделовая emuMMC: файловая проверка неприменима"
+                        emummcDetails = ["Расположение RAW-раздела и его содержимое не проверялись."]
+                    case .disabled:
+                        emummcStatus = "emuMMC отключена в конфигурации"
+                    case .unknown:
+                        emummcStatus = "Режим emuMMC не определён"
+                    }
+                    emummcDetails.append(contentsOf: configuration.warnings)
+                } else {
+                    emummcStatus = "emummc.ini не прочитан: режим emuMMC неизвестен"
+                    emummcDetails = ["Отсутствие конфигурации не означает отсутствия emuMMC."]
+                }
+
+                // These are separate metadata-only scans of both mounted trees.
+                // Neither manifest includes a content checksum or disk snapshot.
+                let sourceManifest = SakuraMigrationManifest.inspect(root: sourceURL,
+                    policy: .excludeKnownMacOSMetadata)
+                let targetManifest = SakuraMigrationManifest.inspect(root: targetURL,
+                    policy: .excludeKnownMacOSMetadata)
+                let conflicts = SakuraMigrationConflictInspector.assess(
+                    source: sourceManifest, target: targetManifest)
+                let conflictStatus: String
+                switch conflicts.status {
+                case .blocked:
+                    conflictStatus = "Обнаружены конфликты или ограничения FAT32: \(conflicts.conflicts.count)"
+                case .needsMoreInformation:
+                    conflictStatus = "Конфликты не удалось надёжно оценить"
+                case .noDetectedConflicts:
+                    conflictStatus = "В проверенных манифестах конфликтов не найдено"
+                }
+                var conflictDetails = Array(conflicts.conflicts.prefix(5))
+                if conflicts.conflicts.count > 5 {
+                    conflictDetails.append("И ещё \(conflicts.conflicts.count - 5) конфликтов")
+                }
+                conflictDetails.append(contentsOf: conflicts.messages)
+                let excludedCount = sourceManifest.skippedPaths.count + targetManifest.skippedPaths.count
+                if excludedCount > 0 {
+                    conflictDetails.append("Исключено путей из двух манифестов: \(excludedCount). Требуется проверка.")
+                }
                 return CapacityScan(sourceID: sourceID, destinationID: targetID,
                     bytes: report.complete ? report.totalLogicalBytes : nil,
                     free: free, files: Int(report.fileCount), excluded: report.skippedPaths.count,
-                    warning: report.complete ? nil : "Инвентаризация неполная: перенос заблокирован")
+                    warning: report.complete ? nil : "Инвентаризация неполная: перенос заблокирован",
+                    emummcStatus: emummcStatus, emummcDetails: emummcDetails,
+                    conflictStatus: conflictStatus, conflictDetails: conflictDetails)
             } catch {
                 return CapacityScan(sourceID: sourceID, destinationID: targetID,
                     bytes: nil, free: nil, files: 0, excluded: 0,
-                    warning: "Не удалось независимо подтвердить диски и тома: \(error.localizedDescription)")
+                    warning: "Не удалось независимо подтвердить диски и тома: \(error.localizedDescription)",
+                    emummcStatus: "Проверка структуры не выполнена", emummcDetails: [],
+                    conflictStatus: "Проверка конфликтов не выполнена", conflictDetails: [])
             }
         }.value
         capacityScan = result
