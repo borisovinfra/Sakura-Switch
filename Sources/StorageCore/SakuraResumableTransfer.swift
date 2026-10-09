@@ -32,6 +32,7 @@ public enum SakuraResumableTransfer {
         journalDirectory: URL,
         session: String,
         previousCheckpoint: SakuraTransferJournal.Checkpoint,
+        approvedSkippedPaths: Set<String> = [],
         shouldStop: () -> Bool = { false },
         onProgress: (Progress) -> Void = { _ in }
     ) throws -> Result {
@@ -53,7 +54,8 @@ public enum SakuraResumableTransfer {
         // Also refuses any unjournaled file already occupying a target path.
         let validated = try SakuraResumePreflight.inspect(
             manifest: manifest, checkpoint: previousCheckpoint,
-            sourceRoot: source, destinationRoot: destination)
+            sourceRoot: source, destinationRoot: destination,
+            approvedSkippedPaths: approvedSkippedPaths)
         let ordered = manifest.entries.filter { $0.kind == .file }
             .sorted { $0.relativePath < $1.relativePath }
         guard let totalBytes = manifest.totalLogicalBytes else { throw Failure.incompleteTransfer }

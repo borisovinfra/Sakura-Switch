@@ -23,10 +23,13 @@ public enum SakuraResumePreflight {
         manifest: SakuraMigrationManifest.Report,
         checkpoint: SakuraTransferJournal.Checkpoint,
         sourceRoot: URL,
-        destinationRoot: URL
+        destinationRoot: URL,
+        approvedSkippedPaths: Set<String> = []
     ) throws -> Report {
         guard manifest.complete else { throw Failure.incompleteManifest }
-        guard manifest.skippedPaths.isEmpty else { throw Failure.excludedEntries }
+        guard Set(manifest.skippedPaths) == approvedSkippedPaths else {
+            throw Failure.excludedEntries
+        }
         guard checkpoint.formatVersion == 1 else { throw Failure.checkpointMismatch("version") }
         let source = sourceRoot.standardizedFileURL
         let destination = destinationRoot.standardizedFileURL

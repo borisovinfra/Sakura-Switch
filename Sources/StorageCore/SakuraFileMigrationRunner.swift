@@ -15,12 +15,19 @@ public enum SakuraFileMigrationRunner {
         public let manifest: SakuraMigrationManifest.Report
         public let directories: SakuraDestinationDirectoryPlan.Plan
         public let requiredBytes: UInt64
+        public let approvedSkippedPaths: Set<String>
     }
 
     /// Read-only preparation. No destination files are created.
-    public static func inspect(sourceRoot: URL) throws -> Preparation {
+    public static func inspect(
+        sourceRoot: URL,
+        approvedSkippedPaths: Set<String> = []
+    ) throws -> Preparation {
+        let policy: SakuraMigrationInventory.Policy =
+            approvedSkippedPaths.isEmpty ? .strict : .excludeKnownMacOSMetadata
+
         let manifest = SakuraMigrationManifest.inspect(
-            root: sourceRoot, policy: .strict
+            root: sourceRoot, policy: policy
         )
 
         guard manifest.complete,
@@ -28,8 +35,20 @@ public enum SakuraFileMigrationRunner {
             throw Failure.incompleteManifest
         }
 
-        guard manifest.skippedPaths.isEmpty else {
+        guard Set(manifest.skippedPaths) == approvedSkippedPaths else {
             throw Failure.excludedPaths
+        }
+
+        for path in approvedSkippedPaths {
+            let name = (path as NSString).lastPathComponent
+            let topLevel = !path.contains("/")
+            let knownFile = name.hasPrefix("._") || name == ".DS_Store"
+            let knownDirectory = topLevel &&
+                [".Spotlight-V100", ".Trashes", ".fseventsd"].contains(name)
+
+            guard knownFile || knownDirectory else {
+                throw Failure.excludedPaths
+            }
         }
 
         let directories = manifest.entries
@@ -48,7 +67,8 @@ public enum SakuraFileMigrationRunner {
         return Preparation(
             manifest: manifest,
             directories: plan,
-            requiredBytes: bytes
+            requiredBytes: bytes,
+            approvedSkippedPaths: approvedSkippedPaths
         )
     }
 
@@ -112,6 +132,7 @@ public enum SakuraFileMigrationRunner {
                 journalDirectory: journalDirectory,
                 session: session,
                 previousCheckpoint: checkpoint,
+                approvedSkippedPaths: preparation.approvedSkippedPaths,
                 shouldStop: {
                     if shouldStop() { return true }
                     do {
