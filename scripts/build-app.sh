@@ -4,7 +4,7 @@ set -euo pipefail
 # Build Sakura Switch.app — native macOS application
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="Sakura Switch"
+APP_NAME="Sakura Switch PRO"
 EXECUTABLE_NAME="SakuraSwitch"
 ICON_NAME="SakuraSwitch.icns"
 BUILD_DIR="$ROOT_DIR/.build/release"
@@ -19,7 +19,7 @@ HELPER_SOURCE="$ROOT_DIR/Resources/Helper/sakuraswitch-mtp-helper.c"
 HELPER_BINARY="${HELPERS_DIR}/sakuraswitch-mtp-helper"
 ICON_SOURCE="$ROOT_DIR/Assets/${ICON_NAME}"
 INSTALL_TO_APPLICATIONS=false
-APP_VERSION="$(git -C "$ROOT_DIR" describe --tags --abbrev=0 2>/dev/null || printf "dev")"
+APP_VERSION="2.0.0"
 
 for arg in "$@"; do
     case "$arg" in
@@ -204,9 +204,9 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key>
     <string>com.projectsakura.sakuraswitch</string>
     <key>CFBundleName</key>
-    <string>Sakura Switch</string>
+    <string>${APP_NAME}</string>
     <key>CFBundleDisplayName</key>
-    <string>Sakura Switch</string>
+    <string>${APP_NAME}</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>ru</string>
     <key>CFBundleLocalizations</key>

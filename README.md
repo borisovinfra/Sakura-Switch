@@ -35,6 +35,57 @@
 
 ---
 
+<!-- SAKURA_STORAGE_200_BEGIN -->
+## 🌸 Sakura Switch PRO 2.0.0 — Sakura Storage Core
+
+**Представляем наш собственный нативный движок Sakura Storage Core для macOS.**
+
+**Почему мы его создали?** Для работы с microSD Nintendo Switch владельцам Mac нередко приходилось использовать Windows, виртуальные машины или обходные инструменты: многие специализированные программы предназначались для Windows. Мы разработали Sakura Storage Core, чтобы анализировать карты памяти, переносить файлы, создавать резервные копии и восстанавливать данные **непосредственно на macOS — без Windows и виртуализации**.
+
+### Возможности Sakura Storage Core
+
+- **Анализ microSD:** файловая структура, разделы, обнаружение файловой emuMMC и сведения о накопителе.
+- **Файловый перенос:** предварительные проверки источника и назначения перед записью.
+- **Backup и Restore:** создание файловых резервных копий и восстановление на microSD.
+- **SHA-256:** проверка целостности файлов при копировании и дополнительная проверка по завершении восстановления.
+- **Checkpoint & Resume:** контрольные точки и продолжение прерванного резервирования после необходимых проверок.
+- **Защита данных:** ограничения на перезапись, проверки путей и остановка при обнаружении ошибок.
+- **Понятный интерфейс:** прогресс по файлам и объёму данных, сообщения о результатах, RU / EN / JP.
+
+**Практическое испытание:** резервирование и восстановление **1855 файлов** на другую microSD с успешной финальной SHA-256-проверкой. Возможности DBI/MTP для подключения Nintendo Switch по USB сохранены.
+
+**Важно:** для Storage Center требуется **отдельный кардридер**, подключённый к Mac; USB/DBI/MTP не заменяет подключение самой microSD. Перед извлечением карты полностью выключите Switch. Резервирование файловое: **скрытые RAW-разделы emuMMC не копируются**; file-based emuMMC включается как обычные доступные файлы.
+
+Sakura Storage Core — собственная разработка проекта Sakura Switch, Amir Borisov.
+
+### 📸 Sakura Storage Center 2.0.0
+
+**Обзор microSD**
+
+![Sakura Storage Center — Overview](Assets/screenshots/09-storage-overview.png)
+
+**Анализ карты и файловой emuMMC**
+
+![Sakura Storage Center — Analysis](Assets/screenshots/10-storage-analysis.png)
+
+**Перенос между картами**
+
+![Sakura Storage Center — Migration](Assets/screenshots/11-storage-migration.png)
+
+**Резервное копирование, SHA-256 и Resume**
+
+![Sakura Storage Center — Backup](Assets/screenshots/12-storage-backup.png)
+
+**Восстановление microSD**
+
+![Sakura Storage Center — Restore](Assets/screenshots/13-storage-restore.png)
+
+*Сложная инженерия внутри. Лёгкость цветения Сакуры снаружи.*
+
+<!-- SAKURA_STORAGE_200_END -->
+
+---
+
 ## 📦 Applications — Homebrew-каталог
 
 Sakura Switch PRO включает встроенный каталог из **50 приложений и компонентов Nintendo Switch**.

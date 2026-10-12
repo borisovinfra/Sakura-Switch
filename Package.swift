@@ -57,6 +57,11 @@ let package = Package(
             name: "ModInstaller"
         ),
 
+        // Storage Center — read-only disk inspection
+        .target(
+            name: "StorageCore"
+        ),
+
         // Orchestration — wires protocol + USB + MTP + Network + file serving
         .target(
             name: "Installer",
@@ -73,13 +78,17 @@ let package = Package(
         // Presentation — SwiftUI app
         .executableTarget(
             name: "SakuraSwitch",
-            dependencies: ["Installer"],
+            dependencies: ["Installer", "StorageCore"],
             resources: [
                 .process("Resources")
             ]
         ),
 
         // Tests
+        .testTarget(
+            name: "StorageCoreTests",
+            dependencies: ["StorageCore"]
+        ),
         .testTarget(
             name: "USBTransportTests",
             dependencies: ["USBTransport", "DBIProtocol"]
