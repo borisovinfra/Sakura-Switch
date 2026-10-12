@@ -33,6 +33,8 @@ public enum StoragePartitionInspector {
         try process.run()
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        try? output.fileHandleForReading.close()
+        try? output.fileHandleForWriting.close()
 
         guard process.terminationStatus == 0 else {
             throw inspectionError(2, "Не удалось прочитать таблицу разделов")

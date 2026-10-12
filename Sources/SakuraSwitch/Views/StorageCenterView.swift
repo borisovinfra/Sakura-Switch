@@ -17,6 +17,7 @@ struct StorageCenterView: View {
     @State private var emummcLoading = false
     @State private var inventoryLoading = false
     @State private var inventoryReport: StorageInventoryScanResult?
+    @State private var showTechnicalDetails = false
 
     var body: some View {
         ScrollView {
@@ -24,16 +25,18 @@ struct StorageCenterView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Sakura Storage Center")
                         .font(.title2.weight(.semibold))
-                    Text("Диагностика microSD и emuMMC")
+                    Text("Информация о карте и файловой emuMMC")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
-                GroupBox("Безопасный режим") {
-                    Label("Только чтение. Запись, форматирование и перенос данных отключены.",
-                          systemImage: "lock.shield")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 5)
+                GroupBox("Проверка без изменений") {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Label("Здесь Sakura только считывает информацию: данные на карте не изменяются.", systemImage: "lock.shield")
+                        Label("Подключите microSD к Mac через кардридер, а не через USB Nintendo Switch.", systemImage: "sdcard")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
                 }
 
                 GroupBox {
@@ -80,9 +83,9 @@ struct StorageCenterView: View {
                                     HStack(spacing: 10) {
                                         Image(systemName: "externaldrive")
                                         VStack(alignment: .leading, spacing: 3) {
-                                            Text(disk.id)
+                                            Text(disk.volumeName ?? "Без названия")
                                                 .fontWeight(.semibold)
-                                            Text("\(ByteCountFormatter.string(fromByteCount: Int64(clamping: disk.size), countStyle: .file)) · \(disk.partitionScheme)")
+                                            Text("\(disk.id) · \(ByteCountFormatter.string(fromByteCount: Int64(clamping: disk.size), countStyle: .file)) · \(disk.partitionScheme)")
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
@@ -109,6 +112,45 @@ struct StorageCenterView: View {
                     Text("Накопители")
                 }
 
+                GroupBox("Результат анализа") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if selectedDiskID == nil {
+                            Label("Выберите карту выше — Sakura покажет результат проверки.", systemImage: "sdcard")
+                                .foregroundStyle(.secondary)
+                        } else if partitionLoading || emummcLoading || inventoryLoading {
+                            ProgressView("Проверяем карту и её файлы…")
+                        } else {
+                            if let partitionError {
+                                Label("Не удалось проверить разделы карты", systemImage: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Text(partitionError).font(.caption).foregroundStyle(.secondary)
+                            } else if let report = inventoryReport {
+                                Label(report.complete ? "Список файлов составлен" : "Проверка файлов завершена с замечаниями",
+                                      systemImage: report.complete ? "checkmark.circle" : "exclamationmark.triangle.fill")
+                                    .foregroundStyle(report.complete ? .green : .orange)
+                                if let count = report.fileCount, let bytes = report.totalBytes {
+                                    Text("Файлов: \(count) · Объём: \(ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .binary))")
+                                }
+                            } else {
+                                Label("Результат проверки файлов пока недоступен", systemImage: "info.circle")
+                            }
+                            if let emummcReport {
+                                Label(emummcReport.title,
+                                      systemImage: emummcReport.found ? "internaldrive" : "info.circle")
+                                if let mode = emummcReport.mode {
+                                    Text("Тип emuMMC: \(mode)").foregroundStyle(.secondary)
+                                }
+                            }
+                            Text("Это проверка структуры и списка файлов, а не проверка исправности microSD или целостности NAND.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
+                }
+
+                DisclosureGroup("Технические сведения: разделы, emuMMC и файлы", isExpanded: $showTechnicalDetails) {
+                    VStack(alignment: .leading, spacing: 14) {
                 GroupBox("Разделы выбранного накопителя") {
                     VStack(alignment: .leading, spacing: 10) {
                         if let selectedDiskID {
@@ -223,8 +265,12 @@ struct StorageCenterView: View {
                     .padding(.vertical, 5)
                 }
 
-                GroupBox("Подготовка переноса") {
-                    Label("Перенос отключён. Нужна отдельная целевая microSD, проверка конфликтов, контроль целостности и повторная проверка накопителей.",
+                    }
+                    .padding(.top, 10)
+                }
+
+                GroupBox("Что дальше?") {
+                    Label("На этой странице доступен только анализ. Для копирования или восстановления перейдите в соответствующую вкладку. Перед переносом на другую карту нужны отдельные проверки безопасности.",
                           systemImage: "lock.shield")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -299,6 +345,7 @@ private struct SafeExternalDisk: Identifiable, Sendable {
     let id: String
     let size: UInt64
     let partitionScheme: String
+    let volumeName: String?
 }
 
 private struct DiskScanResult: Sendable {
@@ -377,8 +424,16 @@ private enum SafeExternalDiskScanner {
                     rejectedCount += 1
                     continue
                 }
-                verified.append(SafeExternalDisk(id: disk.id, size: disk.size,
-                                                 partitionScheme: disk.partitionScheme))
+                let volumeName = (try? StoragePartitionInspector.partitions(for: disk.id))?
+                    .compactMap { $0.volumeName }
+                    .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+                verified.append(SafeExternalDisk(
+                    id: disk.id,
+                    size: disk.size,
+                    partitionScheme: disk.partitionScheme,
+                    volumeName: volumeName
+                ))
             }
             if rejectedCount > 0 {
                 return DiskScanResult(disks: verified,

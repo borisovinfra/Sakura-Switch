@@ -86,7 +86,8 @@ public enum SakuraFileMigrationRunner {
         targetVolumeUUID: String,
         revalidate: () throws -> Void,
         shouldStop: () -> Bool,
-        onProgress: (SakuraResumableTransfer.Progress) -> Void
+        onProgress: (SakuraResumableTransfer.Progress) -> Void,
+        onFinalVerification: (Int, Int) -> Void = { _, _ in }
     ) throws -> SakuraResumableTransfer.Result {
 
         func verifySession() throws {
@@ -189,7 +190,8 @@ public enum SakuraFileMigrationRunner {
 
         let count = try SakuraTransferJournal.verify(
             result.checkpoint,
-            at: destinationRoot
+            at: destinationRoot,
+            onProgress: onFinalVerification
         )
 
         guard count == preparation.manifest.fileCount else {

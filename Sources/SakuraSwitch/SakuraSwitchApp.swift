@@ -54,6 +54,41 @@ final class AppDelegate:
         )
 
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard SakuraMigrationActivity.active else { return true }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Перенос ещё не завершён"
+        alert.informativeText =
+            "Sakura Switch PRO продолжает копирование или финальную проверку SHA-256. " +
+            "Закрытие окна может прервать операцию. Не извлекайте накопители."
+        alert.addButton(withTitle: "Продолжить работу")
+        alert.addButton(withTitle: "Закрыть окно")
+
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
+    func applicationShouldTerminate(
+        _ sender: NSApplication
+    ) -> NSApplication.TerminateReply {
+        guard SakuraMigrationActivity.active else { return .terminateNow }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Перенос ещё не завершён"
+        alert.informativeText =
+            "Продолжается копирование или финальная проверка SHA-256. " +
+            "Выход из приложения может оставить перенос незавершённым. " +
+            "Не извлекайте накопители."
+        alert.addButton(withTitle: "Продолжить работу")
+        alert.addButton(withTitle: "Выйти из Sakura Switch PRO")
+
+        return alert.runModal() == .alertSecondButtonReturn
+            ? .terminateNow
+            : .terminateCancel
+    }
+
     func applicationDidFinishLaunching(
         _ notification: Notification
     ) {
@@ -76,6 +111,7 @@ final class AppDelegate:
     }
 
 
+    @MainActor
     private func configureMainWindow() {
 
         guard
@@ -100,6 +136,7 @@ final class AppDelegate:
     }
 
 
+    @MainActor
     private func normalizeWindowFrame(
         _ window: NSWindow
     ) {
@@ -237,6 +274,7 @@ final class AppDelegate:
     }
 
 
+    @MainActor
     private func bestScreen(
         for window: NSWindow
     ) -> NSScreen? {

@@ -10,7 +10,28 @@ public enum SakuraResumePreflight {
         case checkpointMismatch(String), sourceChanged(String), destinationChanged(String)
         case unjournaledDestination(String), invalidRoots
 
-        public var description: String { String(reflecting: self) }
+        public var description: String {
+            switch self {
+            case .incompleteManifest:
+                return "Неполный манифест"
+            case .excludedEntries:
+                return "Исключения не подтверждены"
+            case .invalidPath(let path):
+                return "Недопустимый путь: \(path)"
+            case .conflictingEntry(let path):
+                return "Конфликт файлов: \(path)"
+            case .checkpointMismatch(let path):
+                return "Несовпадение контрольной точки: \(path)"
+            case .sourceChanged(let path):
+                return "Изменился исходный файл: \(path)"
+            case .destinationChanged(let path):
+                return "Изменился файл назначения: \(path)"
+            case .unjournaledDestination(let path):
+                return "Файл назначения отсутствует в журнале: \(path)"
+            case .invalidRoots:
+                return "Не удалось подтвердить каталоги источника и назначения"
+            }
+        }
     }
 
     public struct Report: Sendable {

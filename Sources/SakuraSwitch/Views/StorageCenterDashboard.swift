@@ -11,8 +11,8 @@ struct StorageCenterDashboard: View {
         case overview = "Обзор"
         case analysis = "Анализ"
         case migration = "Перенос"
-        case backup = "Резервирование"
-        case restore = "Восстановление"
+        case backup = "Копия"
+        case restore = "Восстановить"
         var id: Self { self }
         var icon: String {
             switch self {
@@ -23,6 +23,10 @@ struct StorageCenterDashboard: View {
             case .restore: return "arrow.counterclockwise"
             }
         }
+    }
+
+    private func storageText(_ key: String) -> String {
+        NSLocalizedString(key, comment: "Sakura Storage Center")
     }
 
     private struct DiskCard: Identifiable, Sendable {
@@ -121,8 +125,8 @@ struct StorageCenterDashboard: View {
                     case .overview: overview
                     case .analysis: StorageCenterView()
                     case .migration: transferPreview
-                    case .backup: unavailable("Резервирование", "Создание образа и запись резервных копий пока недоступны.")
-                    case .restore: unavailable("Восстановление", "Запись образов на накопители пока недоступна.")
+                    case .backup: SakuraBackupView()
+                    case .restore: SakuraRestoreView()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -138,18 +142,20 @@ struct StorageCenterDashboard: View {
         .onChange(of: selectedSource) { _, _ in
             diskRevision += 1
             capacityScan = nil
+            Task { await inspectTransferCapacity() }
         }
         .onChange(of: selectedDestination) { _, _ in
             diskRevision += 1
             capacityScan = nil
+            Task { await inspectTransferCapacity() }
         }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("Хранилище")
+            Text(storageText("storage.title"))
                 .font(.system(size: 27, weight: .bold))
-            Text("Резервирование, анализ и перенос microSD для Nintendo Switch")
+            Text(storageText("storage.subtitle"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -163,9 +169,9 @@ struct StorageCenterDashboard: View {
             ForEach(Page.allCases) { item in
                 Button {
                     page = item
-                    events.insert(LogEvent(message: "Открыта вкладка «\(item.rawValue)»", level: .info), at: 0)
+                    events.insert(LogEvent(message: String(format: storageText("storage.event.tab"), storageText("storage.tab.\(item.rawValue)")), level: .info), at: 0)
                 } label: {
-                    Label(item.rawValue, systemImage: item.icon)
+                    Label(storageText("storage.tab.\(item.rawValue)"), systemImage: item.icon)
                         .font(.system(size: 12, weight: .medium))
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
@@ -184,7 +190,7 @@ struct StorageCenterDashboard: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Text("Подключённые устройства").font(.headline)
+                    Text(storageText("storage.connected")).font(.headline)
                     Spacer()
                     Button { Task { await refreshDisks() } } label: {
                         Label("Обновить", systemImage: "arrow.clockwise")
@@ -208,30 +214,30 @@ struct StorageCenterDashboard: View {
                         destinationPlaceholder
                     }
                 }
-                Text("Быстрые действия").font(.headline)
+                Text(storageText("storage.quick_actions")).font(.headline)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 120), spacing: 12), count: 4), spacing: 12) {
-                    quickAction("Анализ карты", description: "Разделы, emuMMC и файлы", icon: "magnifyingglass", tint: .blue, enabled: true) {
+                    quickAction(storageText("storage.action.analysis"), description: storageText("storage.action.analysis_detail"), icon: "magnifyingglass", tint: .blue, enabled: true) {
                         page = .analysis
                     }
-                    quickAction("Перенос карты", description: "Предпросмотр без записи", icon: "arrow.left.arrow.right", tint: .pink, enabled: true) { page = .migration }
-                    quickAction("Резервирование", description: "Пока недоступно", icon: "externaldrive", tint: .green, enabled: false) {}
-                    quickAction("Восстановление", description: "Пока недоступно", icon: "arrow.counterclockwise", tint: .purple, enabled: false) {}
+                    quickAction(storageText("storage.action.migrate"), description: storageText("storage.action.migrate_detail"), icon: "arrow.left.arrow.right", tint: .pink, enabled: true) { page = .migration }
+                    quickAction(storageText("storage.action.backup"), description: storageText("storage.action.backup_detail"), icon: "externaldrive", tint: .green, enabled: true) { page = .backup }
+                    quickAction(storageText("storage.action.restore"), description: storageText("storage.action.restore_detail"), icon: "arrow.counterclockwise", tint: .purple, enabled: true) { page = .restore }
                 }
-                GroupBox("О Sakura Storage Center") {
+                GroupBox(storageText("storage.before")) {
                     VStack(alignment: .leading, spacing: 9) {
-                        Label("Проверка внешних дисков и файловой emuMMC выполняется только для чтения.", systemImage: "lock.shield")
-                        Label("Для работы с RAW emuMMC требуется карта в кардридере Mac; MTP не даёт доступа к физическим разделам.", systemImage: "info.circle")
+                        Label(storageText("storage.note.shutdown"), systemImage: "sdcard")
+                        Label(storageText("storage.note.reader"), systemImage: "cable.connector")
+                        Label(storageText("storage.note.operations"), systemImage: "lock.shield")
+                        Label(storageText("storage.note.raw"), systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
-                        Text("Операции записи, переноса, создания и восстановления образов отключены.")
-                            .foregroundStyle(.secondary)
                     }
                     .font(.caption)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 5)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Последние операции").font(.headline)
-                    Label("Операций переноса или резервирования пока нет", systemImage: "tray")
+                    Text(storageText("storage.recent")).font(.headline)
+                    Label(storageText("storage.note.history"), systemImage: "info.circle")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 70)
                 }
@@ -250,7 +256,7 @@ struct StorageCenterDashboard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 7) {
                         Circle().fill(.green).frame(width: 8, height: 8)
-                        Text(selectedSource == disk.id ? "Текущая карта (источник)" : "Подключённая microSD")
+                        Text(storageText(selectedSource == disk.id ? "storage.disk.current" : "storage.disk.connected"))
                             .font(.subheadline.weight(.semibold))
                     }
                     Text(disk.volumeName ?? disk.id)
@@ -262,7 +268,7 @@ struct StorageCenterDashboard: View {
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    Text("Устройство: \(disk.id)")
+                    Text(String(format: storageText("storage.disk.device"), disk.id))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -274,21 +280,21 @@ struct StorageCenterDashboard: View {
                 ProgressView(value: Double(used), total: Double(total))
                     .tint(.blue)
                 HStack {
-                    Text("Занято: \(sizeText(used))")
+                    Text(String(format: storageText("storage.disk.used"), sizeText(used)))
                     Spacer()
-                    Text("Свободно: \(sizeText(free))")
+                    Text(String(format: storageText("storage.disk.free"), sizeText(free)))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
             } else {
-                Text("Заполнение тома: сведения не подтверждены")
+                Text(storageText("storage.disk.capacityUnknown"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Button(selectedSource == disk.id ? "Выбран как источник" : "Выбрать источник") {
+            Button(storageText(selectedSource == disk.id ? "storage.disk.selected" : "storage.disk.choose")) {
                 selectedSource = disk.id
-                events.insert(LogEvent(message: "Выбран источник \(disk.id). Данные не изменены.", level: .info), at: 0)
+                events.insert(LogEvent(message: String(format: storageText("storage.event.source"), disk.id), level: .info), at: 0)
             }
             .buttonStyle(.bordered)
             .frame(maxWidth: .infinity)
@@ -302,15 +308,13 @@ struct StorageCenterDashboard: View {
     }
 
     // Selection-only preview. NEVER invokes write/format/transfer APIs.
+    // The verified file-based migration view is the only visible transfer workflow.
+    // Legacy diagnostic and synthetic-copy controls are preserved in git history.
     private var transferPreview: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Предпросмотр переноса", systemImage: "arrow.left.arrow.right")
+                Label("Перенос microSD", systemImage: "arrow.left.arrow.right")
                     .font(.title3.weight(.semibold))
-                Label("Выбранные диски — только диагностика. Отдельно доступен тестовый перенос в SAKURATEST.",
-                      systemImage: "lock.shield")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
 
                 GroupBox("Выбор физических накопителей") {
                     VStack(alignment: .leading, spacing: 12) {
@@ -341,6 +345,46 @@ struct StorageCenterDashboard: View {
                     .padding(.vertical, 5)
                 }
 
+                if let sourceID = selectedSource,
+                   let targetID = selectedDestination,
+                   sourceID != targetID,
+                   let source = disks.first(where: { $0.id == sourceID }),
+                   let target = disks.first(where: { $0.id == targetID }) {
+                    if capacityBusy {
+                        ProgressView("Проверяем объём и целевую карту…")
+                    } else if let check = capacityScan,
+                              check.sourceID == sourceID,
+                              check.destinationID == targetID,
+                              let bytes = check.bytes,
+                              let free = check.free,
+                              check.warning == nil {
+                        // Reserve 1 GiB, as in the transfer engine.
+                        let reserve: UInt64 = 1_073_741_824
+                        if bytes > free || free - bytes < reserve {
+                            Label("Недостаточно места на целевой microSD. Данные: \(sizeText(bytes)), свободно: \(sizeText(free)). Нужно ещё минимум 1 ГиБ резерва.",
+                                  systemImage: "externaldrive.badge.exclamationmark")
+                                .foregroundStyle(.red)
+                        } else {
+                            SakuraPhysicalMigrationView(
+                                sourceDiskID: sourceID,
+                                targetDiskID: targetID,
+                                sourceName: source.volumeName ?? sourceID,
+                                targetName: target.volumeName ?? targetID
+                            )
+                            .id(sourceID + "|" + targetID)
+                        }
+                    } else {
+                        Label("Сначала требуется успешная проверка объёма и накопителей. Копирование заблокировано.",
+                              systemImage: "lock.shield")
+                            .foregroundStyle(.orange)
+                    }
+                } else {
+                    Label("Выберите исходную и целевую microSD выше.", systemImage: "info.circle")
+                        .foregroundStyle(.secondary)
+                }
+
+                DisclosureGroup("Подробная диагностика накопителей") {
+                    VStack(alignment: .leading, spacing: 12) {
                 if let source = disks.first(where: { $0.id == selectedSource }) {
                     transferDiskSummary("Источник · только чтение", disk: source)
                 } else {
@@ -437,8 +481,7 @@ struct StorageCenterDashboard: View {
                     GroupBox("Итог предварительной проверки") {
                         VStack(alignment: .leading, spacing: 9) {
                             if let readiness = result.readiness {
-                                Label(readiness.status == .blocked ? "Перенос заблокирован" :
-                                      "Требуются дополнительные проверки",
+                                Label(storageText(readiness.status == .blocked ? "Перенос заблокирован" : "Требуются дополнительные проверки"),
                                       systemImage: readiness.status == .blocked ?
                                       "xmark.octagon.fill" : "exclamationmark.triangle.fill")
                                     .foregroundStyle(readiness.status == .blocked ? Color.red : Color.orange)
@@ -475,78 +518,14 @@ struct StorageCenterDashboard: View {
                     }
                 }
 
-                GroupBox("Полный перенос файловой microSD") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Источник: NINTENDO · Назначение: виртуальная SAKURASD")
-                            .font(.caption)
-
-                        Text(migrationScanStatus)
-                            .font(.caption)
-                            .foregroundStyle(migrationScanLevel.color)
-
-                        Button("Подготовить перенос NINTENDO → SAKURASD") {
-                            Task { await prepareFullMigration() }
-                        }
-                        .disabled(migrationScanBusy || busy || capacityBusy)
-
-                        if migrationScanBusy {
-                            ProgressView("Составляем полный файловый манифест…")
-                        }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 5)
                 }
 
-                GroupBox("Тестовый перенос · только искусственные файлы") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Тест копирует два файла из .storage-tests на SAKURATEST/SakuraStorageTest. Выбранные вверху диски не участвуют. NINTENDO никогда не используется как источник теста.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        ProgressView(value: Double(trialCompleted), total: 2)
-                        Text("Проверено файлов: \(trialCompleted) из 2")
-                            .font(.caption.monospacedDigit())
-                        Text(trialStatus)
-                            .font(.caption)
-                            .foregroundStyle(trialLevel.color)
-                        HStack {
-                            Button("Начать тестовый перенос") { showTrialConfirmation = true }
-                                .disabled(trialBusy || busy || capacityBusy)
-                            Button("Остановить") { trialTask?.cancel() }
-                                .disabled(!trialBusy)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 5)
-                }
-                .confirmationDialog("Подтвердить тестовую запись на SAKURATEST?",
-                                    isPresented: $showTrialConfirmation, titleVisibility: .visible) {
-                    Button("Записать два искусственных файла") { startTrialTransfer() }
-                    Button("Отмена", role: .cancel) { }
-                } message: {
-                    Text("Только внутри /Volumes/SAKURATEST/SakuraStorageTest. Никаких файлов NINTENDO, форматирования или перезаписи. Остановка проверяется между файлами.")
-                }
-
-                GroupBox("Безопасность") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Источник и назначение должны быть разными физическими дисками.",
-                              systemImage: "checkmark.shield")
-                        Label("Сведения о томе предварительные: это первый распознанный смонтированный раздел.",
-                              systemImage: "info.circle")
-                        Label("Для переноса нужны отдельные проверки структуры, конфликтов, места и повторная идентификация дисков.",
-                              systemImage: "exclamationmark.triangle")
-                        Text("Перенос выбранных накопителей пока недоступен. Разрешён только изолированный тестовый перенос.")
-                            .fontWeight(.semibold)
-                    }
-                    .font(.caption)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 5)
-                }
             }
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
         }
     }
-
     private func transferDiskSummary(_ heading: String, disk: DiskCard) -> some View {
         GroupBox(heading) {
             VStack(alignment: .leading, spacing: 6) {
@@ -632,14 +611,14 @@ struct StorageCenterDashboard: View {
 
     private var journal: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Журнал событий")
+            Text(storageText("storage.log"))
                 .font(.headline)
                 .padding(16)
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if events.isEmpty {
-                        Text("Событий пока нет")
+                        Text(storageText("storage.no_events"))
                             .foregroundStyle(.secondary)
                             .padding(16)
                     }
@@ -1089,7 +1068,7 @@ struct StorageCenterDashboard: View {
             self.selectedDestination = nil
         }
         let text = result.error.map { "Ошибка поиска накопителей: \($0)" }
-            ?? "Проверено внешних физических накопителей: \(result.disks.count)"
+            ?? String(format: storageText("storage.event.drives"), result.disks.count)
         events.insert(LogEvent(message: text, level: result.error != nil ? .error : .info), at: 0)
     }
 }

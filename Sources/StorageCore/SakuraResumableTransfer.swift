@@ -4,8 +4,21 @@ import Foundation
 /// Destination directory tree and journal directory must already exist.
 /// No automatic repair of an unjournaled destination after an interrupted publish.
 public enum SakuraResumableTransfer {
-    public enum Failure: Error {
+    public enum Failure: LocalizedError {
         case invalidSession, stopped, journalConflict, incompleteTransfer
+
+        public var errorDescription: String? {
+            switch self {
+            case .invalidSession:
+                return "Некорректный идентификатор операции."
+            case .stopped:
+                return "Операция остановлена: отмена или не удалось подтвердить исходный накопитель."
+            case .journalConflict:
+                return "Папка контрольных журналов конфликтует с источником или назначением."
+            case .incompleteTransfer:
+                return "Перенос не завершён: количество файлов или объём данных не совпадают."
+            }
+        }
     }
 
     public struct Progress: Sendable {

@@ -5,3 +5,8 @@ build/
 xcuserdata/
 DerivedData/
 .DS_Store
+
+# Local development and test artifacts
+.storage-tests/
+Package.swift.storage-backup
+Sources/SakuraSwitch/Views/SakuraBackupEngine.swift.before-diagnostic-patch

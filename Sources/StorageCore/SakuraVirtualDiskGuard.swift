@@ -30,6 +30,8 @@ public enum SakuraVirtualDiskGuard {
         try infoProcess.run()
         let data = output.fileHandleForReading.readDataToEndOfFile()
         infoProcess.waitUntilExit()
+        try? output.fileHandleForReading.close()
+        try? output.fileHandleForWriting.close()
 
         guard infoProcess.terminationStatus == 0,
               let plist = try PropertyListSerialization.propertyList(
@@ -69,6 +71,8 @@ public enum SakuraVirtualDiskGuard {
         try process.run()
         let volumeData = volumeOutput.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        try? volumeOutput.fileHandleForReading.close()
+        try? volumeOutput.fileHandleForWriting.close()
 
         guard process.terminationStatus == 0,
               let volume = try PropertyListSerialization.propertyList(
@@ -90,6 +94,8 @@ public enum SakuraVirtualDiskGuard {
         try diskProcess.run()
         let diskData = diskOutput.fileHandleForReading.readDataToEndOfFile()
         diskProcess.waitUntilExit()
+        try? diskOutput.fileHandleForReading.close()
+        try? diskOutput.fileHandleForWriting.close()
 
         guard diskProcess.terminationStatus == 0,
               let disk = try PropertyListSerialization.propertyList(

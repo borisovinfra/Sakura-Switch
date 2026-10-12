@@ -20,6 +20,11 @@ public enum SakuraTransferJournal {
     public struct Checkpoint: Codable, Sendable, Equatable {
         public let formatVersion: Int
         public let files: [Entry]
+
+        public init(formatVersion: Int, files: [Entry]) {
+            self.formatVersion = formatVersion
+            self.files = files
+        }
     }
 
     /// Build a checkpoint from a transfer that has returned successfully.
@@ -80,7 +85,11 @@ public enum SakuraTransferJournal {
 
     /// Independently read every destination file and recompute SHA-256.
     /// Does not resume transfers or trust the checkpoint as proof by itself.
-    public static func verify(_ checkpoint: Checkpoint, at destinationRoot: URL) throws -> Int {
+    public static func verify(
+        _ checkpoint: Checkpoint,
+        at destinationRoot: URL,
+        onProgress: (Int, Int) -> Void = { _, _ in }
+    ) throws -> Int {
         try validate(checkpoint)
         let root = destinationRoot.standardizedFileURL
         try checkPath(root, directory: true)
@@ -115,6 +124,7 @@ public enum SakuraTransferJournal {
             let actual = Data(digest.finalize()).map { String(format: "%02x", $0) }.joined()
             guard length == entry.bytes && actual == entry.sha256 else { throw Failure.changedFile(entry.relativePath) }
             verified += 1
+            onProgress(verified, checkpoint.files.count)
         }
         return verified
     }
