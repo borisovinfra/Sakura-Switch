@@ -17,7 +17,7 @@
 
 **macOS 15.0+**
 
-[**🌸 Скачать Sakura Switch v1.1.3 PRO**](https://github.com/borisovinfra/Sakura-Switch/releases/latest)
+[**🌸 Скачать Sakura Switch PRO 2.0.0**](https://github.com/borisovinfra/Sakura-Switch/releases/tag/v2.0.0)
 
 **PRO — это возможности приложения, а не ценник. Sakura Switch PRO бесплатна и останется бесплатной.**
 
@@ -31,7 +31,7 @@
 
 Приложение объединяет **MTP, DBI Backend, SD-карту, Saves, Games & Mods, FTP и Homebrew-каталог** в одном интерфейсе.
 
-Версия **v1.1.0 PRO** значительно расширяет Sakura Switch: теперь Homebrew можно находить и устанавливать непосредственно из приложения.
+В **Sakura Switch PRO 2.0.0** представлен собственный движок **Sakura Storage Core** для работы с microSD непосредственно в macOS. Установка игр и Homebrew, DBI/MTP, сохранения, моды и FTP также доступны в приложении.
 
 ---
 
@@ -231,7 +231,7 @@ Sakura автоматически определяет тип пакета и н
 
 ## 🌍 Три языка
 
-Sakura Switch v1.1.0 поддерживает:
+Sakura Switch PRO 2.0.0 поддерживает:
 
 **🇷🇺 Русский**  
 **🇬🇧 English**  
@@ -277,9 +277,9 @@ Sakura Switch является самостоятельным приложени
 ## 📦 Установка Sakura Switch
 
 1. Перейдите в [**Releases**](https://github.com/borisovinfra/Sakura-Switch/releases/latest).
-2. Скачайте `Sakura-Switch-v1.1.0-PRO.zip`.
+2. Скачайте `Sakura-Switch-PRO-v2.0.0-macOS-Intel.zip`.
 3. Распакуйте архив.
-4. Переместите `Sakura Switch.app` в папку `Applications`.
+4. Переместите `Sakura Switch PRO.app` в папку `Applications`.
 5. Запустите приложение.
 
 ### Первый запуск
@@ -335,13 +335,13 @@ Sakura Switch PRO распространяется бесплатно.
 
 ---
 
-## 🌸 Sakura Switch v1.1.0 PRO
+## 🌸 Sakura Switch PRO 2.0.0
 
 ![Sakura Switch](Assets/screenshots/08-about.png)
 
 Актуальный стабильный релиз **Project Sakura**.
 
-Подробности обновления доступны на странице [**Sakura Switch v1.1.0 PRO**](https://github.com/borisovinfra/Sakura-Switch/releases/tag/v1.1.0).
+Подробности обновления, галерея Sakura Storage Center и дистрибутив доступны на странице [**Sakura Switch PRO 2.0.0**](https://github.com/borisovinfra/Sakura-Switch/releases/tag/v2.0.0).
 
 ---
 
@@ -351,7 +351,7 @@ Sakura Switch PRO распространяется бесплатно.
 
 Made for the Nintendo Switch community.
 
-**Sakura Switch v1.1.0 PRO**
+**Sakura Switch PRO 2.0.0**
 
 **Sakura цветёт. 🌸**
 
