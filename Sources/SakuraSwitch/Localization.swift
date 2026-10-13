@@ -2,10 +2,12 @@ import Foundation
 
 enum L10n {
     private static func text(_ key: String) -> String {
-        String(
+        let bundle = Bundle.main.path(forResource: "ru", ofType: "lproj")
+            .flatMap { Bundle(path: $0) } ?? Bundle.main
+
+        return String(
             localized: String.LocalizationValue(key),
-            bundle: Bundle.module.path(forResource: "ru", ofType: "lproj")
-                .map { Bundle(path: $0)! } ?? .module
+            bundle: bundle
         )
     }
 
