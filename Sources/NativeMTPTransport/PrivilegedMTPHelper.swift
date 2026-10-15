@@ -60,14 +60,6 @@ public enum PrivilegedMTPHelper {
     /// Installation is required only once unless the helper is missing.
     public static func installIfNeeded() async throws {
 
-        if isInstalled,
-           let bundledHelper = bundledPath,
-           FileManager.default.contentsEqual(
-               atPath: bundledHelper,
-               andPath: installedPath
-           ) {
-            return
-        }
 
         guard let bundledHelper = bundledPath else {
             throw HelperError.bundledHelperMissing
@@ -97,6 +89,20 @@ public enum PrivilegedMTPHelper {
         let sudoersLine =
             "\(userName) ALL=(root) NOPASSWD: \(installedPath) *"
 
+        // A matching helper alone is not sufficient: libraries may change.
+        if isInstalled,
+           fm.contentsEqual(atPath: bundledHelper, andPath: installedPath),
+           fm.contentsEqual(
+               atPath: bundledLibmtp,
+               andPath: "\(installedFrameworksPath)/\(libmtpName)"
+           ),
+           fm.contentsEqual(
+               atPath: bundledLibusb,
+               andPath: "\(installedFrameworksPath)/\(libusbName)"
+           ) {
+            return
+        }
+
         // Stage and validate every component before touching installed files.
         // On any failure during commit, restore all previously installed files.
         let components: [(source: String, destination: String, name: String)] = [
@@ -114,9 +120,13 @@ public enum PrivilegedMTPHelper {
             "commit_started=0"
         ]
 
+        // This trap must not abort after the first failed restoration.
+        // Keep staged backups when any restoration fails for manual recovery.
         var recovery: [String] = [
             "status=$?",
             "trap - EXIT",
+            "set +e",
+            "rollback_failed=0",
             "if [ \"$status\" -ne 0 ] && [ \"$commit_started\" -eq 1 ]; then"
         ]
 
@@ -125,18 +135,24 @@ public enum PrivilegedMTPHelper {
             recovery.append(
                 "if [ -f \"\(old)\" ]; then /bin/cp -p \"\(old)\" " +
                     shellQuote(component.destination) +
-                    "; else /bin/rm -f " + shellQuote(component.destination) + "; fi"
+                    "; else /bin/rm -f " + shellQuote(component.destination) +
+                    "; fi || rollback_failed=1"
             )
         }
 
         recovery.append(
             "if [ -f \"$stage/old-sudoers\" ]; then " +
                 "/bin/cp -p \"$stage/old-sudoers\" " + shellQuote(sudoersPath) +
-                "; else /bin/rm -f " + shellQuote(sudoersPath) + "; fi"
+                "; else /bin/rm -f " + shellQuote(sudoersPath) +
+                "; fi || rollback_failed=1"
         )
         recovery += [
             "fi",
-            "/bin/rm -rf \"$stage\"",
+            "if [ \"$rollback_failed\" -ne 0 ]; then",
+            "  echo 'MTP UPDATE: ROLLBACK INCOMPLETE; backups preserved at' \"$stage\" >&2",
+            "  exit 1",
+            "fi",
+            "/bin/rm -rf \"$stage\" || { echo 'MTP UPDATE: cleanup failed' >&2; exit 1; }",
             "exit \"$status\""
         ]
         steps.append("trap " + shellQuote(recovery.joined(separator: "\n")) + " EXIT")
@@ -176,7 +192,8 @@ public enum PrivilegedMTPHelper {
         )
 
         steps.append("commit_started=1")
-        for component in components {
+        // Switch supporting libraries first, then sudoers, helper last.
+        for component in components.dropFirst() {
             steps.append(
                 "/bin/mv -f \"$stage/new-\(component.name)\" " +
                     shellQuote(component.destination)
@@ -184,19 +201,29 @@ public enum PrivilegedMTPHelper {
         }
         steps += [
             "/bin/mv -f \"$stage/new-sudoers\" " + shellQuote(sudoersPath),
-            "/usr/bin/cmp -s " + shellQuote(bundledHelper) + " " + shellQuote(installedPath),
-            "/usr/sbin/visudo -cf " + shellQuote(sudoersPath)
+            "/bin/mv -f \"$stage/new-helper\" " + shellQuote(installedPath)
         ]
+        for component in components {
+            steps.append(
+                "/usr/bin/cmp -s " + shellQuote(component.source) +
+                    " " + shellQuote(component.destination)
+            )
+        }
+        steps.append("/usr/sbin/visudo -cf " + shellQuote(sudoersPath))
 
         let command = steps.joined(separator: "\n")
 
         try await runWithAdministratorPrivileges(command)
 
         guard isInstalled,
-              let bundledHelper = bundledPath,
-              FileManager.default.contentsEqual(
-                  atPath: bundledHelper,
-                  andPath: installedPath
+              fm.contentsEqual(atPath: bundledHelper, andPath: installedPath),
+              fm.contentsEqual(
+                  atPath: bundledLibmtp,
+                  andPath: "\(installedFrameworksPath)/\(libmtpName)"
+              ),
+              fm.contentsEqual(
+                  atPath: bundledLibusb,
+                  andPath: "\(installedFrameworksPath)/\(libusbName)"
               )
         else {
             throw HelperError.installationFailed
