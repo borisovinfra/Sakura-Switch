@@ -49,6 +49,17 @@ mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${FRAMEWORKS_DIR}" "${HELPERS_DIR}"
 cp "${BUILD_DIR}/${EXECUTABLE_NAME}" "${MACOS_DIR}/${EXECUTABLE_NAME}"
 chmod +x "${MACOS_DIR}/${EXECUTABLE_NAME}"
 
+# Bundle Swift Package Manager resources required by Bundle.module.
+SPM_RESOURCE_BUNDLE="${BUILD_DIR}/SakuraSwitch_SakuraSwitch.bundle"
+
+if [[ ! -d "${SPM_RESOURCE_BUNDLE}" ]]; then
+    echo "ERROR: Missing SwiftPM resource bundle"
+    exit 1
+fi
+
+ditto "${SPM_RESOURCE_BUNDLE}" "${RESOURCES_DIR}/SakuraSwitch_SakuraSwitch.bundle"
+
+
 # Bundle localized strings in the standard macOS app location.
 for lang in ru en ja; do
     SOURCE_LPROJ="$ROOT_DIR/Sources/SakuraSwitch/Resources/${lang}.lproj"
