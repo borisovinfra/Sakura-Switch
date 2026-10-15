@@ -60,7 +60,12 @@ public enum PrivilegedMTPHelper {
     /// Installation is required only once unless the helper is missing.
     public static func installIfNeeded() async throws {
 
-        if isInstalled {
+        if isInstalled,
+           let bundledHelper = bundledPath,
+           FileManager.default.contentsEqual(
+               atPath: bundledHelper,
+               andPath: installedPath
+           ) {
             return
         }
 
@@ -92,48 +97,108 @@ public enum PrivilegedMTPHelper {
         let sudoersLine =
             "\(userName) ALL=(root) NOPASSWD: \(installedPath) *"
 
-        let command = [
-            "/bin/mkdir -p",
-            shellQuote("\(installRoot)/Helpers"),
-            shellQuote(installedFrameworksPath),
-            "&&",
+        // Stage and validate every component before touching installed files.
+        // On any failure during commit, restore all previously installed files.
+        let components: [(source: String, destination: String, name: String)] = [
+            (bundledHelper, installedPath, "helper"),
+            (bundledLibmtp, "\(installedFrameworksPath)/\(libmtpName)", "libmtp"),
+            (bundledLibusb, "\(installedFrameworksPath)/\(libusbName)", "libusb")
+        ]
 
-            "/usr/bin/install -o root -g wheel -m 0755",
-            shellQuote(bundledHelper),
-            shellQuote(installedPath),
-            "&&",
+        var steps: [String] = [
+            "set -eu",
+            "/bin/mkdir -p " + shellQuote("\(installRoot)/Helpers") +
+                " " + shellQuote(installedFrameworksPath),
+            "stage=$(/usr/bin/mktemp -d " +
+                shellQuote("\(installRoot)/.mtp-update.XXXXXXXX") + ")",
+            "commit_started=0"
+        ]
 
-            "/usr/bin/install -o root -g wheel -m 0755",
-            shellQuote(bundledLibmtp),
-            shellQuote("\(installedFrameworksPath)/\(libmtpName)"),
-            "&&",
+        var recovery: [String] = [
+            "status=$?",
+            "trap - EXIT",
+            "if [ \"$status\" -ne 0 ] && [ \"$commit_started\" -eq 1 ]; then"
+        ]
 
-            "/usr/bin/install -o root -g wheel -m 0755",
-            shellQuote(bundledLibusb),
-            shellQuote("\(installedFrameworksPath)/\(libusbName)"),
-            "&&",
+        for component in components {
+            let old = "$stage/old-\(component.name)"
+            recovery.append(
+                "if [ -f \"\(old)\" ]; then /bin/cp -p \"\(old)\" " +
+                    shellQuote(component.destination) +
+                    "; else /bin/rm -f " + shellQuote(component.destination) + "; fi"
+            )
+        }
 
-            "/usr/bin/printf '%s\\n'",
-            shellQuote(sudoersLine),
-            ">",
-            shellQuote(sudoersPath),
-            "&&",
+        recovery.append(
+            "if [ -f \"$stage/old-sudoers\" ]; then " +
+                "/bin/cp -p \"$stage/old-sudoers\" " + shellQuote(sudoersPath) +
+                "; else /bin/rm -f " + shellQuote(sudoersPath) + "; fi"
+        )
+        recovery += [
+            "fi",
+            "/bin/rm -rf \"$stage\"",
+            "exit \"$status\""
+        ]
+        steps.append("trap " + shellQuote(recovery.joined(separator: "\n")) + " EXIT")
 
-            "/usr/sbin/chown root:wheel",
-            shellQuote(sudoersPath),
-            "&&",
+        for component in components {
+            steps.append(
+                "/usr/bin/install -o root -g wheel -m 0755 " +
+                    shellQuote(component.source) + " \"$stage/new-\(component.name)\""
+            )
+            steps.append(
+                "/usr/bin/cmp -s " + shellQuote(component.source) +
+                    " \"$stage/new-\(component.name)\""
+            )
+        }
 
-            "/bin/chmod 0440",
-            shellQuote(sudoersPath),
-            "&&",
+        steps.append(
+            "/usr/bin/printf '%s\\n' " + shellQuote(sudoersLine) +
+                " > \"$stage/new-sudoers\""
+        )
+        steps += [
+            "/usr/sbin/chown root:wheel \"$stage/new-sudoers\"",
+            "/bin/chmod 0440 \"$stage/new-sudoers\"",
+            "/usr/sbin/visudo -cf \"$stage/new-sudoers\""
+        ]
 
-            "/usr/sbin/visudo -cf",
-            shellQuote(sudoersPath)
-        ].joined(separator: " ")
+        for component in components {
+            steps.append(
+                "if [ -f " + shellQuote(component.destination) +
+                    " ]; then /bin/cp -p " + shellQuote(component.destination) +
+                    " \"$stage/old-\(component.name)\"; fi"
+            )
+        }
+        steps.append(
+            "if [ -f " + shellQuote(sudoersPath) +
+                " ]; then /bin/cp -p " + shellQuote(sudoersPath) +
+                " \"$stage/old-sudoers\"; fi"
+        )
+
+        steps.append("commit_started=1")
+        for component in components {
+            steps.append(
+                "/bin/mv -f \"$stage/new-\(component.name)\" " +
+                    shellQuote(component.destination)
+            )
+        }
+        steps += [
+            "/bin/mv -f \"$stage/new-sudoers\" " + shellQuote(sudoersPath),
+            "/usr/bin/cmp -s " + shellQuote(bundledHelper) + " " + shellQuote(installedPath),
+            "/usr/sbin/visudo -cf " + shellQuote(sudoersPath)
+        ]
+
+        let command = steps.joined(separator: "\n")
 
         try await runWithAdministratorPrivileges(command)
 
-        guard isInstalled else {
+        guard isInstalled,
+              let bundledHelper = bundledPath,
+              FileManager.default.contentsEqual(
+                  atPath: bundledHelper,
+                  andPath: installedPath
+              )
+        else {
             throw HelperError.installationFailed
         }
     }
