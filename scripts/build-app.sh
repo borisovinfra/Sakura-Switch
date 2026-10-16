@@ -61,7 +61,7 @@ ditto "${SPM_RESOURCE_BUNDLE}" "${RESOURCES_DIR}/SakuraSwitch_SakuraSwitch.bundl
 
 
 # Bundle localized strings in the standard macOS app location.
-for lang in ru en ja; do
+for lang in ru en ja zh-Hans; do
     SOURCE_LPROJ="$ROOT_DIR/Sources/SakuraSwitch/Resources/${lang}.lproj"
     TARGET_LPROJ="${RESOURCES_DIR}/${lang}.lproj"
 

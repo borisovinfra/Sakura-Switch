@@ -23,7 +23,7 @@ struct ContentView: View {
             switch self {
             case .installation: return L10n.navInstallation
             case .sdCard: return L10n.navSDCard
-            case .storageCenter: return "Хранилище"
+            case .storageCenter: return L10n.storageTitle
             case .saves: return L10n.navSaves
             case .gamesAndMods: return L10n.navGamesAndMods
             case .applications: return L10n.sidebarApplications
@@ -260,7 +260,7 @@ struct ContentView: View {
                         .font(.system(size: 28))
                         .foregroundStyle(.orange)
 
-                    Text("Не удалось загрузить сохранения")
+                    Text(L10n.savesLoadFailed)
                         .font(.headline)
 
                     Text(savesError)
@@ -269,7 +269,7 @@ struct ContentView: View {
                         .multilineTextAlignment(.center)
                         .textSelection(.enabled)
 
-                    Button("Повторить") {
+                    Button(L10n.savesRetry) {
                         Task {
                             await loadSaveGames()
                         }

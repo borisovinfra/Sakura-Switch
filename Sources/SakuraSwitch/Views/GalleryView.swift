@@ -1157,7 +1157,7 @@ struct GalleryView: View {
                 .textSelection(.enabled)
 
             Button(
-                "Повторить",
+                L10n.galleryRetry,
                 action: retry
             )
         }
