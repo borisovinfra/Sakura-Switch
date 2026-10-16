@@ -17,7 +17,7 @@
 
 **macOS 15.0+**
 
-[**🌸 Скачать Sakura Switch PRO 2.0.1**](https://github.com/borisovinfra/Sakura-Switch/releases/tag/v2.0.1)
+[**🌸 Скачать Sakura Switch PRO 2.1.0**](https://github.com/borisovinfra/Sakura-Switch/releases/tag/v2.1.0)
 
 **PRO — это возможности приложения, а не ценник. Sakura Switch PRO бесплатна и останется бесплатной.**
 
@@ -32,6 +32,23 @@
 Приложение объединяет **MTP, DBI Backend, SD-карту, Saves, Games & Mods, FTP и Homebrew-каталог** в одном интерфейсе.
 
 В **Sakura Switch PRO 2.0.0** представлен собственный движок **Sakura Storage Core** для работы с microSD непосредственно в macOS. Установка игр и Homebrew, DBI/MTP, сохранения, моды и FTP также доступны в приложении.
+
+---
+
+## 🌸 Sakura Switch PRO 2.1.0 — Sakura Blooms Beyond Borders!
+
+**Четыре языка. Одна Сакура. Одно сообщество. ❤️**
+
+По просьбе друзей из Китая мы добавили **упрощённый китайский (简体中文)**. Спасибо всем, кто поддерживает Sakura Switch, предлагает идеи и помогает проекту расти — где бы вы ни находились.
+
+- **577 переведённых строк** китайского интерфейса.
+- **Автоматический выбор языка** по настройкам macOS: русский, английский, японский и упрощённый китайский.
+- Улучшена локализация навигации Storage Center и кнопок повторного действия.
+- Существующие возможности MTP, DBI, Homebrew и управления microSD сохранены.
+
+[**🌸 Sakura Switch PRO 2.1.0 — Release & Download**](https://github.com/borisovinfra/Sakura-Switch/releases/tag/v2.1.0)
+
+*Сакура создана для всех. Бесплатно — сейчас и всегда. Сакура цветёт без границ!*
 
 ---
 
@@ -229,13 +246,14 @@ Sakura автоматически определяет тип пакета и н
 
 ---
 
-## 🌍 Три языка
+## 🌍 Четыре языка
 
-Sakura Switch PRO 2.0.0 поддерживает:
+Sakura Switch PRO 2.1.0 поддерживает:
 
 **🇷🇺 Русский**  
 **🇬🇧 English**  
-**🇯🇵 日本語**
+**🇯🇵 日本語**  
+**🇨🇳 简体中文**
 
 Язык выбирается автоматически в соответствии с настройками macOS.
 
@@ -277,7 +295,7 @@ Sakura Switch является самостоятельным приложени
 ## 📦 Установка Sakura Switch
 
 1. Перейдите в [**Releases**](https://github.com/borisovinfra/Sakura-Switch/releases/latest).
-2. Скачайте `Sakura-Switch-PRO-v2.0.1-macOS-Intel.zip`.
+2. Скачайте `Sakura-Switch-PRO-v2.1.0-macOS-Intel.zip`.
 3. Распакуйте архив.
 4. Переместите `Sakura Switch PRO.app` в папку `Applications`.
 5. Запустите приложение.
@@ -335,13 +353,13 @@ Sakura Switch PRO распространяется бесплатно.
 
 ---
 
-## 🌸 Sakura Switch PRO 2.0.1
+## 🌸 Sakura Switch PRO 2.1.0
 
 ![Sakura Switch](Assets/screenshots/08-about.png)
 
-Актуальный стабильный релиз **Project Sakura**.
+Актуальный стабильный релиз **Project Sakura** — теперь с поддержкой четырёх языков.
 
-Подробности обновления, галерея Sakura Storage Center и дистрибутив доступны на странице [**Sakura Switch PRO 2.0.1**](https://github.com/borisovinfra/Sakura-Switch/releases/tag/v2.0.1).
+Подробности обновления и дистрибутив доступны на странице [**Sakura Switch PRO 2.1.0**](https://github.com/borisovinfra/Sakura-Switch/releases/tag/v2.1.0).
 
 ---
 
@@ -351,9 +369,9 @@ Sakura Switch PRO распространяется бесплатно.
 
 Made for the Nintendo Switch community.
 
-**Sakura Switch PRO 2.0.1**
+**Sakura Switch PRO 2.1.0**
 
-**Sakura цветёт. 🌸**
+**Сакура цветёт без границ. 🌸**
 
 </div>
 
