@@ -2,7 +2,14 @@ import Foundation
 
 enum L10n {
     private static func text(_ key: String) -> String {
-        let bundle = Bundle.main.path(forResource: "ru", ofType: "lproj")
+        let supported = ["ru", "en", "ja", "zh-Hans"]
+
+        let language = Bundle.preferredLocalizations(
+            from: supported,
+            forPreferences: Locale.preferredLanguages
+        ).first ?? "ru"
+
+        let bundle = Bundle.main.path(forResource: language, ofType: "lproj")
             .flatMap { Bundle(path: $0) } ?? Bundle.main
 
         return String(
@@ -10,6 +17,8 @@ enum L10n {
             bundle: bundle
         )
     }
+
+    static var storageTitle: String { text("storage.title") }
 
     // MARK: - Compatibility
 

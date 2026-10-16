@@ -120,7 +120,7 @@ struct SDCardBrowserView: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
 
-                    Button("Повторить") {
+                    Button(L10n.galleryRetry) {
                         Task {
                             await reload()
                         }
